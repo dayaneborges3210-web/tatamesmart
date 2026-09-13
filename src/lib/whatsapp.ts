@@ -1,5 +1,6 @@
 import http from "node:http";
 import https from "node:https";
+import { createHash } from "node:crypto";
 import { waDigits } from "./money";
 
 export function normalizeEvolutionUrl(raw: string) {
@@ -26,6 +27,8 @@ function evoHeaderRecord(h?: HeadersInit): Record<string, string> {
 function evoRaw(url: string, init?: RequestInit): Promise<Response> {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
+    const pinnedVps = u.hostname === "129.121.55.118" || u.hostname === "whatsapp.metalcoreerp.com.br";
+    if (pinnedVps) { u.protocol = "https:"; u.hostname = "whatsapp.metalcoreerp.com.br"; u.port = "443"; }
     const lib = u.protocol === "https:" ? https : http;
     const req = lib.request(
       {
@@ -35,7 +38,11 @@ function evoRaw(url: string, init?: RequestInit): Promise<Response> {
         path: `${u.pathname}${u.search}`,
         method: init?.method || "GET",
         headers: evoHeaderRecord(init?.headers),
-        rejectUnauthorized: false,
+        rejectUnauthorized: true,
+        ...(pinnedVps ? { lookup: (_hostname: string, options: unknown, callback: (error: NodeJS.ErrnoException | null, address: string | { address: string; family: number }[], family?: number) => void) => {
+          if ((options as { all?: boolean })?.all) callback(null, [{ address: "129.121.55.118", family: 4 }]);
+          else callback(null, "129.121.55.118", 4);
+        } } : {}),
       },
       (res) => {
         const chunks: Buffer[] = [];
@@ -51,6 +58,7 @@ function evoRaw(url: string, init?: RequestInit): Promise<Response> {
       },
     );
     req.on("error", reject);
+    req.setTimeout(15000, () => req.destroy(new Error("Evolution: tempo de resposta esgotado.")));
     if (typeof init?.body === "string") req.write(init.body);
     req.end();
   });
@@ -61,14 +69,7 @@ async function evoJson(url: string, init?: RequestInit) {
   try {
     res = await evoRaw(url, init);
   } catch {
-    const alt = url.startsWith("https://")
-      ? `http://${url.slice("https://".length)}`
-      : `https://${url.slice("http://".length)}`;
-    try {
-      res = await evoRaw(alt, init);
-    } catch {
-      throw new Error("Não alcançou a Evolution. URL: http://129.121.55.118");
-    }
+    throw new Error("Não foi possível alcançar a Evolution com conexão segura. Verifique a rede do servidor.");
   }
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
@@ -77,7 +78,7 @@ async function evoJson(url: string, init?: RequestInit) {
       (typeof err === "string" ? err : (err as { message?: string } | undefined)?.message) ||
       (typeof json.message === "string" ? json.message : "") ||
       `Evolution recusou (${res.status}).`;
-    throw new Error(msg);
+    throw Object.assign(new Error(msg), { status: res.status });
   }
   return json;
 }
@@ -158,7 +159,7 @@ export async function evolutionQr(opts: { url: string; instance: string; token: 
   };
 }
 
-export async function createEvolutionInstance(opts: { url: string; token: string; instance: string }) {
+export async function createEvolutionInstance(opts: { url: string; token: string; instance: string; instanceToken?: string }) {
   const base = normalizeEvolutionUrl(opts.url);
   const instance = opts.instance.trim();
   if (!base || !instance || !opts.token.trim()) return;
@@ -170,16 +171,17 @@ export async function createEvolutionInstance(opts: { url: string; token: string
         instanceName: instance,
         qrcode: true,
         integration: "WHATSAPP-BAILEYS",
+        ...(opts.instanceToken ? { token: opts.instanceToken } : {}),
       }),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
-    if (/exist|already|já exist|403|409/i.test(msg)) return;
+    if (/already exists|already in use|já existe/i.test(msg)) return;
     throw err;
   }
 }
 
 export function instanceNameFor(userId: string) {
-  const s = userId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
-  return `ts${s || "escola"}`.slice(0, 30);
+  if (!userId) throw new Error("Academia não identificada.");
+  return `ts${createHash("sha256").update(userId).digest("hex").slice(0, 40)}`;
 }

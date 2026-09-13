@@ -8,7 +8,7 @@ import { cn } from "@/lib/cn";
 import { useDojo } from "@/lib/dojo-store";
 import { FONTS, SCALE_MAX, SCALE_MIN, SCALE_STEP, clampScale } from "@/lib/fonts";
 import { pingPrinter, printRaw, printerAgentUrl, setPrinterAgentUrl } from "@/lib/thermal";
-import { waQrClient, waTestClient } from "@/lib/wa-client";
+import { waQrClient, waTestClient, waStateClient } from "@/lib/wa-client";
 
 export const Route = createFileRoute("/configuracoes")({ component: ConfigPage });
 
@@ -36,9 +36,6 @@ function ConfigBody() {
     waUrl,
     waOwner,
     saveSchool,
-    testWhatsApp,
-    waQr,
-    waState,
     loading,
   } = useDojo();
   const [name, setName] = useState(school);
@@ -75,7 +72,7 @@ function ConfigBody() {
     if (!waReady || loading) return;
     let stop = false;
     setBusy(true);
-    void waQr()
+    void waQrClient()
       .then((r) => {
         if (stop) return;
         setWaLink(r.state === "open" ? "open" : "connecting");
@@ -96,7 +93,7 @@ function ConfigBody() {
   useEffect(() => {
     if (!waReady || waLink === "open") return;
     const t = window.setInterval(() => {
-      void waState()
+      void waStateClient()
         .then((s) => {
           setWaLink(s);
           if (s === "open") setApiInfo("WhatsApp conectado.");
@@ -112,7 +109,7 @@ function ConfigBody() {
     waToken?: string;
     waAuto?: boolean;
   } = {}) {
-    void saveSchool({
+    return saveSchool({
       name,
       theme: brand,
       logo: mark,
@@ -289,8 +286,11 @@ function ConfigBody() {
             onSubmit={(e) => {
               e.preventDefault();
               setApiInfo("");
-              persist({ waUrl: apiUrl || "http://129.121.55.118", waPhoneId: apiId, waToken: apiToken, waAuto: true });
-              setApiInfo("API salva. O QR das academias já pode ser lido.");
+              setBusy(true);
+              void persist({ waUrl: apiUrl || "http://129.121.55.118", waPhoneId: apiId, waToken: apiToken, waAuto: true })
+                .then(() => { setApiToken(""); setApiInfo("API salva. Atualize o QR para conectar."); })
+                .catch((err: unknown) => setApiInfo(err instanceof Error ? err.message : "Não foi possível salvar a API."))
+                .finally(() => setBusy(false));
             }}
           >
             <Field label="URL da Evolution (só a empresa mãe)">
@@ -336,7 +336,7 @@ function ConfigBody() {
                   setApiInfo("");
                   setBusy(true);
                   const override = apiToken.trim()
-                    ? { url: apiUrl || "http://129.121.55.118", instance: apiId || "tatamesmart", token: apiToken.trim() }
+                    ? { url: apiUrl || "http://129.121.55.118", token: apiToken.trim() }
                     : undefined;
                   void waQrClient(override)
                     .then((r) => {
@@ -360,7 +360,6 @@ function ConfigBody() {
                   void (apiToken.trim()
                     ? waTestClient({
                         url: apiUrl || "http://129.121.55.118",
-                        instance: apiId || "tatamesmart",
                         token: apiToken.trim(),
                         to: phone,
                       })

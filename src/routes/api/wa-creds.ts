@@ -43,7 +43,7 @@ export const Route = createFileRoute("/api/wa-creds")({
             instance: creds.instance,
             token: creds.token,
             ownerPhone: rows[0]?.owner_phone ?? "",
-          });
+          }, { headers: { "Cache-Control": "no-store, private", "Vary": "Cookie, Authorization" } });
         } catch (err) {
           return Response.json(
             { message: err instanceof Error ? err.message : "Sem credenciais." },

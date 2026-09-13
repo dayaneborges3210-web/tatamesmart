@@ -61,7 +61,6 @@ export async function browserCreateInstance(opts: { url: string; token: string; 
 
 export async function browserQr(opts: { url: string; token: string; instance: string }) {
   const base = evoBrowserBase(opts.url);
-  await browserCreateInstance(opts);
   const json = await evoFetch(`${base}/instance/connect/${encodeURIComponent(opts.instance)}`, {
     headers: { apikey: opts.token },
   });
@@ -71,6 +70,15 @@ export async function browserQr(opts: { url: string; token: string; instance: st
   if (state.includes("open")) return { qr: "", state: "open" as const };
   if (!qr) throw new Error("A Evolution não mandou o QR.");
   return { qr, state: "connecting" as const };
+}
+
+export async function browserState(opts: { url: string; token: string; instance: string }) {
+  const json = await evoFetch(`${evoBrowserBase(opts.url)}/instance/connectionState/${encodeURIComponent(opts.instance)}`, {
+    headers: { apikey: opts.token },
+  });
+  const instance = json.instance as { state?: string } | undefined;
+  const state = String(instance?.state || json.state || "").toLowerCase();
+  return state === "open" || state === "connected" ? "open" : state === "connecting" ? "connecting" : "close";
 }
 
 export async function browserSendText(opts: {
