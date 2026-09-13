@@ -1,5 +1,5 @@
 import { getBearerToken } from "@/lib/auth/client";
-import { browserQr, browserSendText } from "@/lib/evo-browser";
+import { browserQr, browserSendText, browserState } from "@/lib/evo-browser";
 
 type Creds = { url: string; instance: string; token: string; ownerPhone: string };
 
@@ -15,7 +15,7 @@ async function loadCreds(): Promise<Creds> {
 }
 
 export async function waQrClient(override?: { url?: string; instance?: string; token?: string }) {
-  const saved = override?.token ? null : await loadCreds();
+  const saved = await loadCreds();
   const url = override?.url || saved?.url || "";
   const instance = override?.instance || saved?.instance || "";
   const token = override?.token || saved?.token || "";
@@ -24,7 +24,7 @@ export async function waQrClient(override?: { url?: string; instance?: string; t
 }
 
 export async function waTestClient(override?: { url?: string; instance?: string; token?: string; to?: string }) {
-  const saved = override?.token ? null : await loadCreds();
+  const saved = await loadCreds();
   const url = override?.url || saved?.url || "";
   const instance = override?.instance || saved?.instance || "";
   const token = override?.token || saved?.token || "";
@@ -38,4 +38,8 @@ export async function waTestClient(override?: { url?: string; instance?: string;
     to,
     body: "TatameSmart: seu WhatsApp está no ar. As mensalidades dos alunos saem deste número.",
   });
+}
+
+export async function waStateClient() {
+  return browserState(await loadCreds());
 }

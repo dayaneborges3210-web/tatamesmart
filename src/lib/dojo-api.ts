@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { DEFAULT_CHARGE_TEXTS, buildMessage, invoiceStatus, phaseFor } from "@/lib/cobranca";
@@ -698,15 +698,23 @@ async function dispatchToday(userId: string) {
       phase,
       templates: snap.chargeTexts,
     });
+    const claim = await sql`insert into wa_dispatch_claims (user_id, kind, item_id, dispatch_day)
+      values (${userId}, ${"invoice"}, ${inv.id}, ${today})
+      on conflict do nothing returning item_id`;
+    if (!claim.length) continue;
     try {
       await sendWhatsAppText({ token, url, instance: phoneId, to: student.phone, body: text });
       const id = `${userId}:r${Date.now()}${sent}`;
       await sql`insert into reminders (id, user_id, invoice_id, date, phase)
         values (${id}, ${userId}, ${inv.id}, ${today}, ${phase})`;
+      await sql`update wa_dispatch_claims set status = 'sent', updated_at = now()
+        where user_id = ${userId} and kind = 'invoice' and item_id = ${inv.id} and dispatch_day = ${today}`;
       sent += 1;
     } catch (err) {
       failed += 1;
       errors.push(`${student.name}: ${err instanceof Error ? err.message : "falhou"}`);
+      await sql`update wa_dispatch_claims set status = 'uncertain', updated_at = now()
+        where user_id = ${userId} and kind = 'invoice' and item_id = ${inv.id} and dispatch_day = ${today}`;
     }
   }
   return { sent, failed, errors: errors.slice(0, 6) };
@@ -728,6 +736,11 @@ async function dispatchAlarms(userId: string) {
   for (const row of rows) {
     if (row.alarm_sent) continue;
     if (!row.alarm_at || !alarmDue(row.alarm_at)) continue;
+    const alarmKey = String(row.alarm_at);
+    const claim = await sql`insert into wa_dispatch_claims (user_id, kind, item_id, dispatch_day)
+      values (${userId}, ${"alarm"}, ${row.id}, ${alarmKey})
+      on conflict do nothing returning item_id`;
+    if (!claim.length) continue;
     try {
       await sendWhatsAppText({
         ...creds,
@@ -735,15 +748,19 @@ async function dispatchAlarms(userId: string) {
         body: `TatameSmart — ${school[0]?.name || "Agenda"}\n\n${row.title}\n${row.note}\n${formatAlarm(row.alarm_at)}`,
       });
       await sql`update agenda set alarm_sent = ${true} where id = ${row.id} and user_id = ${userId}`;
+      await sql`update wa_dispatch_claims set status = 'sent', updated_at = now()
+        where user_id = ${userId} and kind = 'alarm' and item_id = ${row.id} and dispatch_day = ${alarmKey}`;
       sent += 1;
     } catch {
       failed += 1;
+      await sql`update wa_dispatch_claims set status = 'uncertain', updated_at = now()
+        where user_id = ${userId} and kind = 'alarm' and item_id = ${row.id} and dispatch_day = ${alarmKey}`;
     }
   }
   return { sent, failed };
 }
 
-export async function runWaBot() {
+export const runWaBot = createServerOnlyFn(async () => {
   const sql = await getSql();
   const schools = await sql<{ user_id: string; name: string }>`
     select s.user_id, s.name from schools s
@@ -769,7 +786,7 @@ export async function runWaBot() {
     }
   }
   return results;
-}
+});
 
 export const dispatchTodayFn = createServerFn({ method: "POST" })
   .middleware([authMiddleware])

@@ -1,6 +1,7 @@
 import { getSql } from "@/lib/db";
-import { createEvolutionInstance, instanceNameFor, normalizeEvolutionUrl } from "@/lib/whatsapp";
-import { isMaeEmail } from "@/lib/site";
+import { createEvolutionInstance, evolutionState, instanceNameFor, normalizeEvolutionUrl } from "@/lib/whatsapp";
+import { randomBytes } from "node:crypto";
+import { isMaeEmail, PLATFORM_OWNER_EMAIL } from "@/lib/site";
 
 export type PlatformWa = {
   url: string;
@@ -54,8 +55,10 @@ export async function ensurePlatformWa(): Promise<PlatformWa> {
       wa_phone_id: string | null;
       wa_token: string | null;
       user_id: string;
-    }>`select wa_url, wa_phone_id, wa_token, user_id from schools
-       where coalesce(wa_token, '') <> '' and coalesce(wa_phone_id, '') <> '' and coalesce(wa_url, '') <> ''
+    }>`select s.wa_url, s.wa_phone_id, s.wa_token, s.user_id from schools s
+       join "user" u on u.id = s.user_id
+       where lower(u.email) = ${PLATFORM_OWNER_EMAIL}
+       and coalesce(s.wa_token, '') <> '' and coalesce(s.wa_phone_id, '') <> '' and coalesce(s.wa_url, '') <> ''
        limit 1`;
     if (school[0]) {
       url = (school[0].wa_url ?? "").trim();
@@ -76,7 +79,7 @@ export async function savePlatformWa(userId: string, next: { url?: string; insta
   const current = await ensurePlatformWa();
   const sql = await getSql();
   const me = await sql<{ email: string | null }>`select email from "user" where id = ${userId}`;
-  if (current.token && current.ownerUserId && current.ownerUserId !== userId && !isMaeEmail(me[0]?.email)) {
+  if (!isMaeEmail(me[0]?.email)) {
     throw new Error("A API do WhatsApp já é da TatameSmart. O cliente não altera.");
   }
   const url = normalizeEvolutionUrl(next.url ?? current.url).slice(0, 200);
@@ -99,18 +102,26 @@ export async function ensureSchoolWa(userId: string) {
     throw new Error("A TatameSmart ainda não ligou a API do WhatsApp.");
   }
   const sql = await getSql();
-  const me = await sql<{ email: string | null; wa_phone_id: string | null }>`
-    select u.email, s.wa_phone_id
-    from "user" u
-    left join schools s on s.user_id = u.id
-    where u.id = ${userId}
-  `;
-  const mae = isMaeEmail(me[0]?.email);
-  let instance = (me[0]?.wa_phone_id ?? "").trim();
-  if (!instance || (!mae && instance === platform.instance)) {
-    instance = mae && platform.instance ? platform.instance : instanceNameFor(userId);
-    await createEvolutionInstance({ url: platform.url, token: platform.token, instance });
-    await sql`update schools set wa_phone_id = ${instance}, wa_url = ${platform.url}, wa_auto = ${true} where user_id = ${userId}`;
+  const schools = await sql<{ user_id: string }>`select user_id from schools where user_id = ${userId}`;
+  if (!schools.length) throw new Error("Academia não encontrada.");
+  await sql`insert into wa_school_instances (user_id, instance_name, instance_token)
+    values (${userId}, ${instanceNameFor(userId)}, ${randomBytes(32).toString("hex")})
+    on conflict (user_id) do nothing`;
+  const rows = await sql<{ instance_name: string; instance_token: string; provisioned: boolean }>`
+    select instance_name, instance_token, provisioned from wa_school_instances where user_id = ${userId}`;
+  const row = rows[0];
+  if (!row || row.instance_token === platform.token) throw new Error("Credencial individual indisponível.");
+  const creds = { url: platform.url, instance: row.instance_name, token: row.instance_token };
+  if (!row.provisioned) {
+    try { await createEvolutionInstance({ url: platform.url, token: platform.token, instance: creds.instance, instanceToken: creds.token }); }
+    catch (error) {
+      // A concurrent request may have created it. Only accept that if our
+      // individual credential can actually access this exact instance.
+      try { await evolutionState(creds); } catch { throw error; }
+    }
+    await evolutionState(creds);
+    await sql`update wa_school_instances set provisioned = true where user_id = ${userId}`;
+    await sql`update schools set wa_phone_id = ${creds.instance}, wa_url = ${platform.url} where user_id = ${userId}`;
   }
-  return { url: platform.url, token: platform.token, instance };
+  return creds;
 }

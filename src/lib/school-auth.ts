@@ -3,7 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
 import { getSql } from "@/lib/db";
-import { ensureMaeAccount, isMaePassword } from "@/lib/mae.server";
+import { ensureMaeAccount } from "@/lib/mae.server";
 import { isMaeEmail } from "@/lib/site";
 
 function newId() {
@@ -40,16 +40,7 @@ export async function emailAuthCore(data: {
   `;
   let userId = users[0]?.id ?? "";
 
-  if (isMaeEmail(email) && isMaePassword(password)) {
-    if (!userId) {
-      await ensureMaeAccount();
-      const again = await sql<{ id: string }>`
-        select id from "user" where lower(email) = ${email} limit 1
-      `;
-      userId = again[0]?.id ?? "";
-    }
-    if (userId) return { token: await openSession(userId) };
-  }
+  if (isMaeEmail(email) && !userId) throw new Error("Conta administrativa ainda não configurada.");
 
   if (data.kind === "criar" && !userId) {
     userId = newId();
