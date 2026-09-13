@@ -88,8 +88,18 @@ export function classDates(days: string[], month: string, until?: string) {
 export function monthTitle(month: string) {
   const [y, m] = month.split("-").map(Number);
   const names = [
-    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
-    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+    "janeiro",
+    "fevereiro",
+    "março",
+    "abril",
+    "maio",
+    "junho",
+    "julho",
+    "agosto",
+    "setembro",
+    "outubro",
+    "novembro",
+    "dezembro",
   ];
   return `${names[m - 1]} de ${y}`;
 }

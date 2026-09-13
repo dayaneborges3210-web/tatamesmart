@@ -28,6 +28,10 @@ async function sessionUserId(request: Request) {
   return session?.user?.id ?? "";
 }
 
+async function platformCreds(userId: string) {
+  return ensureSchoolWa(userId);
+}
+
 export const Route = createFileRoute("/api/whatsapp")({
   server: {
     handlers: {
@@ -44,7 +48,7 @@ export const Route = createFileRoute("/api/whatsapp")({
           body = {};
         }
         try {
-          const creds = await ensureSchoolWa(userId);
+          const creds = await platformCreds(userId);
           if (body.action === "test") {
             const sql = await getSql();
             const rows = await sql<{ name: string; owner_phone: string | null }>`

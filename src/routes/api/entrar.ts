@@ -43,8 +43,19 @@ export const Route = createFileRoute("/api/entrar")({
           });
           const token = result.token;
           const secure = request.url.startsWith("https://") || request.headers.get("x-forwarded-proto") === "https";
+          const cookie = [
+            `__Host-grok-auth.session_token=${token}`,
+            "Path=/",
+            "HttpOnly",
+            "SameSite=Lax",
+            "Max-Age=2592000",
+            secure ? "Secure" : "",
+          ]
+            .filter(Boolean)
+            .join("; ");
+          // __Host- requires Secure; on http preview use a host-only name.
           const hostCookie = secure
-            ? `__Host-grok-auth.session_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000; Secure`
+            ? cookie
             : `grok-auth.session_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`;
           return new Response(JSON.stringify(result), {
             status: 200,

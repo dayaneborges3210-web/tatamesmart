@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0d10;
+  --color-surface: #14161a;
+  --color-surface-2: #1a1d22;
+  --color-fg: #e8eaed;
+  --color-muted: #8b9098;
+  --color-subtle: #6b7078;
+  --color-border: #2a2e35;
+  --color-accent: #c8ccd4;
+  --color-accent-fg: #0b0d10;
+  --color-danger: #e85d4c;
+  --color-success: #3fae7c;
+  --color-warning: #c4a36a;
+  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+}
+
+@layer base {
+  html {
+    font-size: calc(16px * var(--type-scale, 1));
+  }
+
+  html,
+  body,
+  #app {
+    min-height: 100%;
+    background: var(--color-bg);
+    color: var(--color-fg);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  * {
+    border-color: var(--color-border);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-brand="aco"] {
+  --color-accent: #c8ccd4;
+  --color-accent-fg: #0b0d10;
+}
+html[data-brand="coral"] {
+  --color-accent: #e85d4c;
+  --color-accent-fg: #0b0d10;
+}
+html[data-brand="ambar"] {
+  --color-accent: #c4a36a;
+  --color-accent-fg: #0b0d10;
+}
+html[data-brand="tatame"] {
+  --color-accent: #3fae7c;
+  --color-accent-fg: #0b0d10;
+}
+html[data-brand="gi"] {
+  --color-accent: #4a7d9d;
+  --color-accent-fg: #0b0d10;
+}
+html[data-brand="vinho"] {
+  --color-accent: #a34b5c;
+  --color-accent-fg: #f4e8ea;
+}
+html[data-brand="roxa"] {
+  --color-accent: #7b6b9a;
+  --color-accent-fg: #f4f0f8;
+}
+html[data-brand="kimono"] {
+  --color-accent: #d4783a;
+  --color-accent-fg: #0b0d10;
+}
+html[data-brand="oceano"] {
+  --color-accent: #2f9b8a;
+  --color-accent-fg: #0b0d10;
+}
+html[data-brand="oss"] {
+  --color-accent: #f2f4f7;
+  --color-accent-fg: #0b0d10;
+}
+
+html .swatch-aco { --swatch: #c8ccd4; }
+html .swatch-coral { --swatch: #e85d4c; }
+html .swatch-ambar { --swatch: #c4a36a; }
+html .swatch-tatame { --swatch: #3fae7c; }
+html .swatch-gi { --swatch: #4a7d9d; }
+html .swatch-vinho { --swatch: #a34b5c; }
+html .swatch-roxa { --swatch: #7b6b9a; }
+html .swatch-kimono { --swatch: #d4783a; }
+html .swatch-oceano { --swatch: #2f9b8a; }
+html .swatch-oss { --swatch: #f2f4f7; }
+
+html[data-font="plex"] { --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; }
+html[data-font="manrope"] { --font-sans: Manrope, sans-serif; }
+html[data-font="source"] { --font-sans: "Source Sans 3", sans-serif; }
+html[data-font="franklin"] { --font-sans: "Libre Franklin", sans-serif; }
+html[data-font="public"] { --font-sans: "Public Sans", sans-serif; }
+html[data-font="dm"] { --font-sans: "DM Sans", sans-serif; }
+html[data-font="outfit"] { --font-sans: Outfit, sans-serif; }
+html[data-font="news"] { --font-sans: Newsreader, serif; }
+html[data-font="literata"] { --font-sans: Literata, serif; }
+html[data-font="fraunces"] { --font-sans: Fraunces, serif; }

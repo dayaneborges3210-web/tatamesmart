@@ -5,10 +5,38 @@ export type ChargePhase = "inicio" | "lembrete" | "vencimento" | "atraso";
 export type { ChargeTexts };
 
 export const DEFAULT_CHARGE_TEXTS: ChargeTexts = {
-  inicio: `Olá, {aluno}. Aqui é a {escola}.\n\nSua mensalidade de {competencia}, no valor de {valor}, vence em {vencimento}.\n\nEste é o aviso com 5 dias de antecedência para você se organizar com calma.\n\nPIX: {pix}\n\nSe já pagou, desconsidere esta mensagem.`,
-  lembrete: `Olá, {aluno}. Tudo bem?\n\nPassando só para lembrar: a mensalidade de {competencia} ({valor}) vence em {dias}, no dia {vencimento}.\n\nPIX: {pix}\n\nQualquer dúvida, estamos à disposição.`,
-  vencimento: `Olá, {aluno}. Chegou o dia do vencimento.\n\nA mensalidade de {competencia}, no valor de {valor}, vence hoje ({vencimento}).\n\nSe puder regularizar ainda hoje, sua matrícula segue em dia e evitamos atraso.\n\nPIX: {pix}`,
-  atraso: `Olá, {aluno}. Identificamos que a mensalidade de {competencia} ({valor}) está atrasada.\n\nO vencimento era {vencimento} ({dias} em atraso).\n\nPedimos que regularize o quanto antes para manter o acesso às aulas.\n\nPIX: {pix}\n\nSe o pagamento já foi feito, nos avise para baixarmos no sistema.`,
+  inicio: `Olá, {aluno}. Aqui é a {escola}.
+
+Sua mensalidade de {competencia}, no valor de {valor}, vence em {vencimento}.
+
+Este é o aviso com 5 dias de antecedência para você se organizar com calma.
+
+PIX: {pix}
+
+Se já pagou, desconsidere esta mensagem.`,
+  lembrete: `Olá, {aluno}. Tudo bem?
+
+Passando só para lembrar: a mensalidade de {competencia} ({valor}) vence em {dias}, no dia {vencimento}.
+
+PIX: {pix}
+
+Qualquer dúvida, estamos à disposição.`,
+  vencimento: `Olá, {aluno}. Chegou o dia do vencimento.
+
+A mensalidade de {competencia}, no valor de {valor}, vence hoje ({vencimento}).
+
+Se puder regularizar ainda hoje, sua matrícula segue em dia e evitamos atraso.
+
+PIX: {pix}`,
+  atraso: `Olá, {aluno}. Identificamos que a mensalidade de {competencia} ({valor}) está atrasada.
+
+O vencimento era {vencimento} ({dias} em atraso).
+
+Pedimos que regularize o quanto antes para manter o acesso às aulas.
+
+PIX: {pix}
+
+Se o pagamento já foi feito, nos avise para baixarmos no sistema.`,
 };
 
 export function invoiceStatus(inv: Invoice, today?: string): Invoice["status"] {
