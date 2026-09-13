@@ -3,11 +3,10 @@ import { useMemo, useState } from "react";
 import { Shell } from "@/components/shell";
 import { Badge, Button, Field, Input } from "@/components/ui";
 import { type Belt, type Modality, type Student, useDojo } from "@/lib/dojo-store";
+import { BELTS, clampDegree, formatBelt, maxDegree } from "@/lib/dojo-types";
 import { formatDatePt } from "@/lib/money";
 
 export const Route = createFileRoute("/alunos")({ component: AlunosPage });
-
-const BELTS: Belt[] = ["Branca", "Azul", "Roxa", "Marrom", "Preta", "Iniciante"];
 
 export function AlunosPage() {
   return (
@@ -65,6 +64,7 @@ function AlunosBody() {
   const [healthNote, setHealthNote] = useState("");
   const [classId, setClassId] = useState(classes[0]?.id ?? "c1");
   const [belt, setBelt] = useState<Belt>("Branca");
+  const [degree, setDegree] = useState(0);
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -74,7 +74,7 @@ function AlunosBody() {
       (s) =>
         s.name.toLowerCase().includes(t) ||
         s.modality.toLowerCase().includes(t) ||
-        s.belt.toLowerCase().includes(t) ||
+        formatBelt(s.belt, s.degree).toLowerCase().includes(t) ||
         (digits && s.cpf.replace(/\D/g, "").includes(digits)) ||
         (digits && s.cep.replace(/\D/g, "").includes(digits)),
     );
@@ -91,6 +91,8 @@ function AlunosBody() {
     setCepHint("");
     setHasHealth(false);
     setHealthNote("");
+    setBelt("Branca");
+    setDegree(0);
     setOpen(false);
   }
 
@@ -137,6 +139,7 @@ function AlunosBody() {
           <thead className="bg-surface text-left text-xs text-muted">
             <tr>
               <th className="px-4 py-3 font-medium">Aluno</th>
+              <th className="px-4 py-3 font-medium">Faixa</th>
               <th className="px-4 py-3 font-medium">CPF</th>
               <th className="px-4 py-3 font-medium">Turma</th>
               <th className="px-4 py-3 font-medium">Saúde</th>
@@ -156,6 +159,7 @@ function AlunosBody() {
                     <p className="font-medium">{s.name}</p>
                     <p className="text-xs text-muted">{s.phone}</p>
                   </td>
+                  <td className="px-4 py-3 text-muted">{formatBelt(s.belt, s.degree)}</td>
                   <td className="px-4 py-3 tabular text-muted">{s.cpf || "—"}</td>
                   <td className="px-4 py-3 text-muted">{turma?.name ?? "—"}</td>
                   <td className="px-4 py-3">
@@ -192,6 +196,7 @@ function AlunosBody() {
                 classId,
                 modality: (cls?.modality ?? "Jiu-jitsu") as Modality,
                 belt,
+                degree: clampDegree(belt, degree),
                 cpf,
                 address,
                 cep,
@@ -248,17 +253,44 @@ function AlunosBody() {
                   ))}
                 </select>
               </Field>
-              <Field label="Faixa">
-                <select
-                  className="min-h-11 w-full rounded-sm border border-border bg-bg px-3 text-sm text-fg"
-                  value={belt}
-                  onChange={(e) => setBelt(e.target.value as Belt)}
-                >
-                  {BELTS.map((b) => (
-                    <option key={b}>{b}</option>
-                  ))}
-                </select>
-              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Faixa">
+                  <select
+                    className="min-h-11 w-full rounded-sm border border-border bg-bg px-3 text-sm text-fg"
+                    value={belt}
+                    onChange={(e) => {
+                      const next = e.target.value as Belt;
+                      setBelt(next);
+                      setDegree((d) => clampDegree(next, d));
+                    }}
+                  >
+                    {BELTS.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Grau">
+                  <select
+                    className="min-h-11 w-full rounded-sm border border-border bg-bg px-3 text-sm text-fg"
+                    value={degree}
+                    disabled={maxDegree(belt) === 0}
+                    onChange={(e) => setDegree(clampDegree(belt, Number(e.target.value)))}
+                  >
+                    {Array.from({ length: maxDegree(belt) + 1 }, (_, n) => (
+                      <option key={n} value={n}>
+                        {n === 0
+                          ? "Sem grau"
+                          : belt === "Preta" || belt === "Coral" || belt === "Vermelha"
+                            ? `${n}º dan`
+                            : `${n}º grau`}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+
               <fieldset>
                 <legend className="mb-2 text-xs font-medium text-muted">Possui algum problema de saúde ou alergia?</legend>
                 <div className="grid grid-cols-2 gap-2">
@@ -322,7 +354,7 @@ function AlunosBody() {
                 label="Problema de saúde ou alergia"
                 value={ficha.hasHealth ? ficha.healthNote || "Possui restrição" : "Nenhum informado"}
               />
-              <Row label="Faixa" value={ficha.belt} />
+              <Row label="Faixa" value={formatBelt(ficha.belt, ficha.degree)} />
               <Row label="Desde" value={formatDatePt(ficha.joined)} />
             </dl>
             <div className="mt-5">

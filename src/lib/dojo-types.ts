@@ -1,10 +1,47 @@
-export type Belt =
-  | "Branca"
-  | "Azul"
-  | "Roxa"
-  | "Marrom"
-  | "Preta"
-  | "Iniciante";
+export const BELTS = [
+  "Sem faixa",
+  "Branca",
+  "Cinza",
+  "Amarela",
+  "Laranja",
+  "Verde",
+  "Azul",
+  "Roxa",
+  "Marrom",
+  "Preta",
+  "Coral",
+  "Vermelha",
+  "Iniciante",
+] as const;
+
+export type Belt = (typeof BELTS)[number];
+
+export function isBelt(v: string): v is Belt {
+  return (BELTS as readonly string[]).includes(v);
+}
+
+export function maxDegree(belt: string) {
+  if (belt === "Preta" || belt === "Coral" || belt === "Vermelha") return 10;
+  if (belt === "Sem faixa" || belt === "Iniciante") return 0;
+  return 4;
+}
+
+export function clampDegree(belt: string, n: number) {
+  const max = maxDegree(belt);
+  const x = Math.round(Number(n) || 0);
+  if (x < 0) return 0;
+  if (x > max) return max;
+  return x;
+}
+
+export function formatBelt(belt: string, degree = 0) {
+  const n = clampDegree(belt, degree);
+  if (!n) return belt;
+  if (belt === "Preta" || belt === "Coral" || belt === "Vermelha") {
+    return n === 1 ? `${belt} · 1º dan` : `${belt} · ${n}º dan`;
+  }
+  return n === 1 ? `${belt} · 1º grau` : `${belt} · ${n}º grau`;
+}
 
 export const MODALITIES = ["Jiu-jitsu", "Judô", "Muay Thai", "Capoeira", "Kids"] as const;
 export type Modality = (typeof MODALITIES)[number];
@@ -19,6 +56,7 @@ export type Student = {
   phone: string;
   modality: Modality;
   belt: Belt;
+  degree: number;
   classId: string;
   status: "ativo" | "inativo" | "inadimplente" | "trial";
   joined: string;

@@ -15,7 +15,7 @@ import type {
   ReminderSend,
   Student,
 } from "@/lib/dojo-types";
-import { isModality } from "@/lib/dojo-types";
+import { clampDegree, isBelt, isModality } from "@/lib/dojo-types";
 import { alarmDue, formatAlarm } from "@/lib/alarms";
 import { DEMO_SCHOOL, isDemoEmail } from "@/lib/demo";
 import { ensureMaeAccount } from "@/lib/mae.server";
@@ -102,6 +102,11 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
     instructor: string;
     capacity: number;
   }>`select id, name, modality, days, time, time_end, instructor, capacity from classes where user_id = ${userId} order by time`;
+  try {
+    await sql.query(`alter table students add column if not exists degree integer not null default 0`);
+  } catch {
+    /* column already there */
+  }
   const studentRows = await sql<{
     id: string;
     name: string;
@@ -116,7 +121,8 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
     cep: string | null;
     has_health: boolean | null;
     health_note: string | null;
-  }>`select id, name, phone, modality, belt, class_id, status, joined, cpf, address, cep, has_health, health_note from students where user_id = ${userId} order by name`;
+    degree: number | null;
+  }>`select id, name, phone, modality, belt, class_id, status, joined, cpf, address, cep, has_health, health_note, degree from students where user_id = ${userId} order by name`;
   const invRows = await sql<{
     id: string;
     student_id: string;
@@ -239,7 +245,8 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
       name: s.name,
       phone: s.phone,
       modality: s.modality as Student["modality"],
-      belt: s.belt as Student["belt"],
+      belt: isBelt(s.belt) ? s.belt : "Branca",
+      degree: Number(s.degree) || 0,
       classId: s.class_id,
       status: s.status as Student["status"],
       joined: asDate(s.joined),
@@ -826,6 +833,7 @@ export const addStudentFn = createServerFn({ method: "POST" })
       classId: string;
       modality: string;
       belt: string;
+      degree?: number;
       cpf: string;
       address: string;
       cep: string;
@@ -844,8 +852,9 @@ export const addStudentFn = createServerFn({ method: "POST" })
     const address = data.address.trim().slice(0, 200);
     const hasHealth = Boolean(data.hasHealth);
     const healthNote = hasHealth ? data.healthNote.trim().slice(0, 300) : "";
-    await sql`insert into students (id, user_id, name, phone, modality, belt, class_id, status, joined, cpf, address, cep, has_health, health_note)
-      values (${id}, ${context.userId}, ${data.name}, ${data.phone}, ${data.modality}, ${data.belt}, ${data.classId}, ${"ativo"}, ${t}, ${cpf}, ${address}, ${cep}, ${hasHealth}, ${healthNote})`;
+    const degree = clampDegree(data.belt, data.degree ?? 0);
+    await sql`insert into students (id, user_id, name, phone, modality, belt, degree, class_id, status, joined, cpf, address, cep, has_health, health_note)
+      values (${id}, ${context.userId}, ${data.name}, ${data.phone}, ${data.modality}, ${data.belt}, ${degree}, ${data.classId}, ${"ativo"}, ${t}, ${cpf}, ${address}, ${cep}, ${hasHealth}, ${healthNote})`;
     await sql`insert into invoices (id, user_id, student_id, month, amount, status, due)
       values (${`inv-${id}`}, ${context.userId}, ${id}, ${due.slice(0, 7)}, ${amount}, ${"aberta"}, ${due})`;
     return snapshot(context.userId);
