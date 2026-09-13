@@ -1,0 +1,9 @@
+node_modules
+.tanstack
+.vercel
+.output
+dist
+artifacts
+*.zip
+.env
+.env.local
