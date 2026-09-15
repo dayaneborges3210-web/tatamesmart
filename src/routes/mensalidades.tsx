@@ -12,7 +12,7 @@ import {
 } from "@/lib/cobranca";
 import { useDojo } from "@/lib/dojo-store";
 import { brl, daysUntil, formatDatePt, monthLabel, todayISO } from "@/lib/money";
-import { printRaw, receiptMensalidade } from "@/lib/thermal";
+import { printA4, receiptMensalidade } from "@/lib/thermal";
 
 export const Route = createFileRoute("/mensalidades")({ component: MensalidadesPage });
 
@@ -164,7 +164,7 @@ function CobrancaBody() {
                       variant="ghost"
                       onClick={() => {
                         void markPaid(row.inv.id);
-                        void printRaw(
+                        printA4(
                           receiptMensalidade({
                             school,
                             aluno: student.name,
@@ -173,7 +173,7 @@ function CobrancaBody() {
                             due: formatDatePt(row.inv.due),
                             paidAt: formatDatePt(today),
                           }),
-                        ).catch(() => undefined);
+                        );
                       }}
                     >
                       Baixar e imprimir

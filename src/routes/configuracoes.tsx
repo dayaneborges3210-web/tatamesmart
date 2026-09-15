@@ -7,7 +7,7 @@ import { BRANDS } from "@/lib/brands";
 import { cn } from "@/lib/cn";
 import { useDojo } from "@/lib/dojo-store";
 import { FONTS, SCALE_MAX, SCALE_MIN, SCALE_STEP, clampScale } from "@/lib/fonts";
-import { pingPrinter, printRaw, printerAgentUrl, setPrinterAgentUrl } from "@/lib/thermal";
+import { printA4 } from "@/lib/thermal";
 import { waQrClient, waTestClient, waStateClient } from "@/lib/wa-client";
 
 export const Route = createFileRoute("/configuracoes")({ component: ConfigPage });
@@ -52,7 +52,6 @@ function ConfigBody() {
   const [qr, setQr] = useState("");
   const [waLink, setWaLink] = useState("");
   const [busy, setBusy] = useState(false);
-  const [agent, setAgent] = useState(printerAgentUrl());
   const [printInfo, setPrintInfo] = useState("");
   const showApiForm = waOwner;
 
@@ -379,64 +378,25 @@ function ConfigBody() {
       </section>
 
       <section className="mt-10 max-w-xl">
-        <h2 className="text-sm font-medium">Impressora térmica (RAW)</h2>
+        <h2 className="text-sm font-medium">Impressora A4</h2>
         <p className="mt-1 text-sm text-muted">
-          O navegador não fala com USB. Rode o agente neste PC e a impressora recebe o cupom em ESC/POS.
+          Recibos de mensalidade e da loja saem na impressora A4 do computador, pelo diálogo normal do navegador.
         </p>
-        <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-muted">
-          <li>
-            Baixe{" "}
-            <a className="text-fg underline" href="/print-agent/iniciar.bat" download>
-              iniciar.bat
-            </a>{" "}
-            e{" "}
-            <a className="text-fg underline" href="/print-agent/TatameSmart-Impressora.ps1" download>
-              TatameSmart-Impressora.ps1
-            </a>
-            .
-          </li>
-          <li>
-            Coloque os dois na mesma pasta. Se a impressora for de rede, edite{" "}
-            <a className="text-fg underline" href="/print-agent/printer.json" download>
-              printer.json
-            </a>{" "}
-            com o IP (porta 9100).
-          </li>
-          <li>Dê dois cliques em iniciar.bat e deixe a janela aberta.</li>
-        </ol>
-        <Field label="Endereço do agente">
-          <Input
-            value={agent}
-            onChange={(e) => {
-              setAgent(e.target.value);
-              setPrinterAgentUrl(e.target.value);
-            }}
-          />
-        </Field>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3">
           <Button
             type="button"
             variant="ghost"
             onClick={() => {
               setPrintInfo("");
-              void pingPrinter()
-                .then(() => setPrintInfo("Agente no ar."))
-                .catch((err: unknown) => setPrintInfo(err instanceof Error ? err.message : "Agente off."));
+              try {
+                printA4([school || "TatameSmart", "TatameSmart", "Teste de impressão A4"]);
+                setPrintInfo("Abriu o diálogo de impressão A4.");
+              } catch (err: unknown) {
+                setPrintInfo(err instanceof Error ? err.message : "Não imprimiu.");
+              }
             }}
           >
-            Testar agente
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              setPrintInfo("");
-              void printRaw([school, "TatameSmart", "Teste de impressao"])
-                .then(() => setPrintInfo("Enviado para a impressora."))
-                .catch((err: unknown) => setPrintInfo(err instanceof Error ? err.message : "Não imprimiu."));
-            }}
-          >
-            Imprimir teste
+            Imprimir teste A4
           </Button>
         </div>
         {printInfo ? <p className="mt-2 text-sm text-muted">{printInfo}</p> : null}

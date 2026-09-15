@@ -70,7 +70,7 @@ function EstoqueBody() {
 
       <p className="mt-4 text-sm text-muted">
         {stock.length === 0
-          ? "Estoque vazio."
+          ? "Estoque vazio. Clique em Novo item para cadastrar o que a academia vende."
           : `${stock.length} itens · ${brl(value)} em estoque${low.length ? ` · ${low.length} abaixo do mínimo` : ""}`}
       </p>
 

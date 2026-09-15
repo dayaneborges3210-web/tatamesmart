@@ -9,6 +9,12 @@ import {
   addStudentFn,
   addPlanFn,
   saveStudentFn,
+  deleteStudentFn,
+  savePlanFn,
+  deletePlanFn,
+  saveStaffFn,
+  deleteStaffFn,
+  deleteClassFn,
   adjustStockFn,
   deleteStockFn,
   dispatchTodayFn,
@@ -66,8 +72,29 @@ const EMPTY: DojoSnapshot = {
 type Store = DojoSnapshot & {
   loading: boolean;
   addStudent: (s: Omit<Student, "id" | "joined">) => Promise<void>;
-  saveStudent: (d: { id: string; docs?: string[]; planId?: string; dueDay?: number; status?: Student["status"] }) => Promise<void>;
+  saveStudent: (d: {
+    id: string;
+    name?: string;
+    phone?: string;
+    classId?: string;
+    modality?: string;
+    belt?: string;
+    degree?: number;
+    cpf?: string;
+    address?: string;
+    cep?: string;
+    hasHealth?: boolean;
+    healthNote?: string;
+    birth?: string;
+    docs?: string[];
+    planId?: string;
+    dueDay?: number;
+    status?: Student["status"];
+  }) => Promise<void>;
+  deleteStudent: (id: string) => Promise<void>;
   addPlan: (d: { name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number }) => Promise<void>;
+  savePlan: (d: { id: string; name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number }) => Promise<void>;
+  deletePlan: (id: string) => Promise<void>;
   toggleAttendance: (studentId: string, classId: string, date: string, present: boolean) => Promise<void>;
   markPaid: (invoiceId: string) => Promise<void>;
   markReminderSent: (invoiceId: string, phase: ReminderSend["phase"]) => Promise<void>;
@@ -99,6 +126,8 @@ type Store = DojoSnapshot & {
   waState: () => Promise<"open" | "connecting" | "close">;
   waQr: () => Promise<{ qr: string; state: string }>;
   addStaff: (d: { name: string; role: string; phone: string; pay: number }) => Promise<void>;
+  saveStaff: (d: { id: string; name: string; role: string; phone: string; pay: number }) => Promise<void>;
+  deleteStaff: (id: string) => Promise<void>;
   addStock: (d: { name: string; category: string; qty: number; minQty: number; unitCost: number; price: number }) => Promise<void>;
   saveStock: (d: { id: string; name: string; category: string; qty: number; minQty: number; unitCost: number; price: number }) => Promise<void>;
   deleteStock: (id: string) => Promise<void>;
@@ -106,6 +135,7 @@ type Store = DojoSnapshot & {
   sellStock: (d: { itemId: string; studentId: string; qty: number; payMethod: string }) => Promise<void>;
   addClass: (d: { name: string; modality: string; days: string[]; time: string; timeEnd: string; instructor: string; capacity: number }) => Promise<void>;
   saveClass: (d: { id: string; name: string; modality: string; days: string[]; time: string; timeEnd: string; instructor: string; capacity: number }) => Promise<void>;
+  deleteClass: (id: string) => Promise<void>;
   addChampionship: (d: {
     name: string;
     place: string;
@@ -245,8 +275,17 @@ export function DojoProvider({ children }: { children: ReactNode }) {
     saveStudent: async (d) => {
       apply(await saveStudentFn({ data: d }));
     },
+    deleteStudent: async (id) => {
+      apply(await deleteStudentFn({ data: { id } }));
+    },
     addPlan: async (d) => {
       apply(await addPlanFn({ data: d }));
+    },
+    savePlan: async (d) => {
+      apply(await savePlanFn({ data: d }));
+    },
+    deletePlan: async (id) => {
+      apply(await deletePlanFn({ data: { id } }));
     },
     toggleAttendance: async (studentId, classId, date, present) => {
       apply(await toggleAttendanceFn({ data: { studentId, classId, date, present } }));
@@ -310,6 +349,12 @@ export function DojoProvider({ children }: { children: ReactNode }) {
     addStaff: async (d) => {
       apply(await addStaffFn({ data: d }));
     },
+    saveStaff: async (d) => {
+      apply(await saveStaffFn({ data: d }));
+    },
+    deleteStaff: async (id) => {
+      apply(await deleteStaffFn({ data: { id } }));
+    },
     addStock: async (d) => {
       apply(await addStockFn({ data: d }));
     },
@@ -330,6 +375,9 @@ export function DojoProvider({ children }: { children: ReactNode }) {
     },
     saveClass: async (d) => {
       apply(await saveClassFn({ data: d }));
+    },
+    deleteClass: async (id) => {
+      apply(await deleteClassFn({ data: { id } }));
     },
     addChampionship: async (d) => {
       apply(await addChampionshipFn({ data: d }));

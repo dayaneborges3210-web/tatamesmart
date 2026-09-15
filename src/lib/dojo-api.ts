@@ -16,7 +16,7 @@ import type {
   ReminderSend,
   Student,
 } from "@/lib/dojo-types";
-import { clampDegree, isBelt, isModality, nextDueFromDay, parseDocs } from "@/lib/dojo-types";
+import { clampDegree, clampDueDay, dueDateInMonth, isBelt, isModality, nextDueFromDay, parseDocs } from "@/lib/dojo-types";
 import { alarmDue, formatAlarm } from "@/lib/alarms";
 import { DEMO_SCHOOL, isDemoEmail } from "@/lib/demo";
 import { ensureMaeAccount } from "@/lib/mae.server";
@@ -941,7 +941,7 @@ export const addStudentFn = createServerFn({ method: "POST" })
       select id, amount, due_day from plans where user_id = ${context.userId} and id = ${data.planId ?? ""}
     `;
     const plan = plans[0];
-    const dueDay = Math.min(28, Math.max(1, data.dueDay || plan?.due_day || 10));
+    const dueDay = clampDueDay(data.dueDay || plan?.due_day || 10);
     const due = nextDueFromDay(dueDay, t);
     const amount = plan ? Number(plan.amount) : data.modality === "Kids" ? 12990 : 17990;
     const cpf = data.cpf.replace(/[^\d.\-]/g, "").slice(0, 14);
@@ -963,12 +963,48 @@ export const addStudentFn = createServerFn({ method: "POST" })
 
 export const saveStudentFn = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((d: { id: string; docs?: string[]; planId?: string; dueDay?: number; status?: Student["status"] }) => d)
+  .validator(
+    (d: {
+      id: string;
+      name?: string;
+      phone?: string;
+      classId?: string;
+      modality?: string;
+      belt?: string;
+      degree?: number;
+      cpf?: string;
+      address?: string;
+      cep?: string;
+      hasHealth?: boolean;
+      healthNote?: string;
+      birth?: string;
+      planId?: string;
+      dueDay?: number;
+      docs?: string[];
+      status?: Student["status"];
+    }) => d,
+  )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     await ensureAcademyExtras();
     const rows = await sql<{ id: string }>`select id from students where id = ${data.id} and user_id = ${context.userId}`;
     if (!rows.length) throw new Error("Aluno não encontrado.");
+    if (data.name !== undefined) {
+      const name = data.name.trim().slice(0, 80);
+      if (!name) throw new Error("Dê um nome ao aluno.");
+      const cpf = (data.cpf ?? "").replace(/[^\d.\-]/g, "").slice(0, 14);
+      const cep = (data.cep ?? "").replace(/[^\d\-]/g, "").slice(0, 9);
+      const address = (data.address ?? "").trim().slice(0, 200);
+      const hasHealth = Boolean(data.hasHealth);
+      const healthNote = hasHealth ? (data.healthNote ?? "").trim().slice(0, 300) : "";
+      const belt = data.belt ?? "Branca";
+      const degree = clampDegree(belt, data.degree ?? 0);
+      const modality = data.modality && isModality(data.modality) ? data.modality : "Jiu-jitsu";
+      const birth = /^\d{4}-\d{2}-\d{2}$/.test(data.birth ?? "") ? data.birth : null;
+      const classId = (data.classId ?? "").slice(0, 80);
+      await sql`update students set name = ${name}, phone = ${(data.phone ?? "").slice(0, 20)}, cpf = ${cpf}, cep = ${cep}, address = ${address}, has_health = ${hasHealth}, health_note = ${healthNote}, belt = ${belt}, degree = ${degree}, modality = ${modality}, class_id = ${classId}, birth = ${birth}
+        where id = ${data.id} and user_id = ${context.userId}`;
+    }
     if (data.docs) {
       const docs = parseDocs(data.docs.join(",")).join(",");
       await sql`update students set docs = ${docs} where id = ${data.id} and user_id = ${context.userId}`;
@@ -977,12 +1013,34 @@ export const saveStudentFn = createServerFn({ method: "POST" })
       await sql`update students set plan_id = ${data.planId} where id = ${data.id} and user_id = ${context.userId}`;
     }
     if (data.dueDay !== undefined) {
-      const dueDay = Math.min(28, Math.max(1, data.dueDay));
+      const dueDay = clampDueDay(data.dueDay);
       await sql`update students set due_day = ${dueDay} where id = ${data.id} and user_id = ${context.userId}`;
+      const open = await sql<{ id: string; month: string }>`
+        select id, month from invoices where student_id = ${data.id} and user_id = ${context.userId} and status <> ${"paga"}
+      `;
+      for (const inv of open) {
+        const month = /^\d{4}-\d{2}$/.test(inv.month) ? inv.month : todayISO().slice(0, 7);
+        const due = dueDateInMonth(month, dueDay);
+        await sql`update invoices set due = ${due} where id = ${inv.id} and user_id = ${context.userId}`;
+      }
     }
     if (data.status) {
       await sql`update students set status = ${data.status} where id = ${data.id} and user_id = ${context.userId}`;
     }
+    return snapshot(context.userId);
+  });
+
+export const deleteStudentFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const rows = await sql<{ id: string }>`select id from students where id = ${data.id} and user_id = ${context.userId}`;
+    if (!rows.length) throw new Error("Aluno não encontrado.");
+    await sql`delete from reminders where user_id = ${context.userId} and invoice_id in (select id from invoices where student_id = ${data.id} and user_id = ${context.userId})`;
+    await sql`delete from invoices where student_id = ${data.id} and user_id = ${context.userId}`;
+    await sql`delete from attendance where student_id = ${data.id} and user_id = ${context.userId}`;
+    await sql`delete from students where id = ${data.id} and user_id = ${context.userId}`;
     return snapshot(context.userId);
   });
 
@@ -1000,10 +1058,41 @@ export const addPlanFn = createServerFn({ method: "POST" })
     const duration = [1, 3, 6, 12].includes(data.durationMonths) ? data.durationMonths : 1;
     const amount = Math.max(0, Math.round(data.amount));
     const weekly = Math.max(0, Math.round(data.weeklyLimit));
-    const dueDay = Math.min(28, Math.max(1, Math.round(data.dueDay) || 10));
+    const dueDay = clampDueDay(data.dueDay);
     const billing = data.billing === "unico" ? "unico" : "mensal";
     await sql`insert into plans (id, user_id, name, duration_months, billing, amount, weekly_limit, due_day)
       values (${id}, ${context.userId}, ${name}, ${duration}, ${billing}, ${amount}, ${weekly}, ${dueDay})`;
+    return snapshot(context.userId);
+  });
+
+export const savePlanFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(
+    (d: { id: string; name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number }) => d,
+  )
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await ensureAcademyExtras();
+    const name = data.name.trim().slice(0, 80);
+    if (!name) throw new Error("Dê um nome ao plano.");
+    const duration = [1, 3, 6, 12].includes(data.durationMonths) ? data.durationMonths : 1;
+    const amount = Math.max(0, Math.round(data.amount));
+    const weekly = Math.max(0, Math.round(data.weeklyLimit));
+    const dueDay = clampDueDay(data.dueDay);
+    const billing = data.billing === "unico" ? "unico" : "mensal";
+    await sql`update plans set name = ${name}, duration_months = ${duration}, billing = ${billing}, amount = ${amount}, weekly_limit = ${weekly}, due_day = ${dueDay}
+      where id = ${data.id} and user_id = ${context.userId}`;
+    return snapshot(context.userId);
+  });
+
+export const deletePlanFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await ensureAcademyExtras();
+    await sql`update students set plan_id = ${""} where plan_id = ${data.id} and user_id = ${context.userId}`;
+    await sql`delete from plans where id = ${data.id} and user_id = ${context.userId}`;
     return snapshot(context.userId);
   });
 
@@ -1169,6 +1258,27 @@ export const addStaffFn = createServerFn({ method: "POST" })
     return snapshot(context.userId);
   });
 
+export const saveStaffFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string; name: string; role: string; phone: string; pay: number }) => d)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const name = data.name.trim().slice(0, 80);
+    if (!name) throw new Error("Dê um nome ao professor.");
+    await sql`update staff set name = ${name}, role = ${data.role.slice(0, 40)}, phone = ${data.phone.slice(0, 20)}, pay = ${Math.max(0, Math.round(data.pay))}
+      where id = ${data.id} and user_id = ${context.userId}`;
+    return snapshot(context.userId);
+  });
+
+export const deleteStaffFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await sql`delete from staff where id = ${data.id} and user_id = ${context.userId}`;
+    return snapshot(context.userId);
+  });
+
 export const addStockFn = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: { name: string; category: string; qty: number; minQty: number; unitCost: number; price: number }) => d)
@@ -1272,6 +1382,17 @@ export const saveClassFn = createServerFn({ method: "POST" })
     const end = (data.timeEnd || addMinutesHHMM(start, 60)).slice(0, 8);
     await sql`update classes set name = ${data.name.trim().slice(0, 80)}, modality = ${data.modality}, days = ${days}, time = ${start}, time_end = ${end}, instructor = ${data.instructor.trim().slice(0, 80)}, capacity = ${cap}
       where id = ${data.id} and user_id = ${context.userId}`;
+    return snapshot(context.userId);
+  });
+
+export const deleteClassFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await sql`update students set class_id = ${""} where class_id = ${data.id} and user_id = ${context.userId}`;
+    await sql`delete from attendance where class_id = ${data.id} and user_id = ${context.userId}`;
+    await sql`delete from classes where id = ${data.id} and user_id = ${context.userId}`;
     return snapshot(context.userId);
   });
 

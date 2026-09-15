@@ -18,13 +18,29 @@ export function ProfessoresPage() {
 }
 
 function ProfessoresBody() {
-  const { staff, classes, addStaff } = useDojo();
-  const [open, setOpen] = useState(false);
+  const { staff, classes, addStaff, saveStaff, deleteStaff } = useDojo();
+  const [editing, setEditing] = useState<(typeof staff)[number] | "new" | null>(null);
   const [name, setName] = useState("");
   const [role, setRole] = useState("Professor");
   const [phone, setPhone] = useState("");
   const [pay, setPay] = useState("");
   const payroll = staff.reduce((n, s) => n + s.pay, 0);
+
+  function reset() {
+    setName("");
+    setRole("Professor");
+    setPhone("");
+    setPay("");
+    setEditing(null);
+  }
+
+  function openEdit(p: (typeof staff)[number]) {
+    setEditing(p);
+    setName(p.name);
+    setRole(p.role);
+    setPhone(p.phone);
+    setPay(p.pay ? (p.pay / 100).toFixed(2).replace(".", ",") : "");
+  }
 
   return (
     <>
@@ -34,7 +50,7 @@ function ProfessoresBody() {
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Professores</h1>
           <p className="mt-1 text-sm text-muted">Quem dá aula, o WhatsApp e o repasse do mês.</p>
         </div>
-        <Button type="button" onClick={() => setOpen(true)}>
+        <Button type="button" onClick={() => setEditing("new")}>
           Novo professor
         </Button>
       </div>
@@ -48,7 +64,7 @@ function ProfessoresBody() {
           const turmas = classes.filter((c) => c.instructor.toLowerCase().includes(p.name.split(" ")[0].toLowerCase()));
           return (
             <li key={p.id} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border bg-surface p-4">
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="font-medium">{p.name}</p>
                 <p className="mt-1 text-sm text-muted">
                   {p.role}
@@ -59,32 +75,43 @@ function ProfessoresBody() {
                 ) : null}
               </div>
               <p className="tabular text-sm">{brl(p.pay)}/mês</p>
+              <div className="flex gap-1">
+                <Button type="button" variant="ghost" onClick={() => openEdit(p)}>
+                  Editar
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    if (window.confirm(`Excluir ${p.name}?`)) void deleteStaff(p.id);
+                  }}
+                >
+                  Excluir
+                </Button>
+              </div>
             </li>
           );
         })}
       </ul>
 
-      {open ? (
+      {editing ? (
         <div className="fixed inset-0 z-50 grid place-items-end bg-bg/70 p-0 md:place-items-center md:p-6">
           <form
             className="w-full max-w-md rounded-t-xl border border-border bg-surface p-5 md:rounded-lg"
             onSubmit={(e) => {
               e.preventDefault();
               if (!name.trim()) return;
-              void addStaff({
+              const payload = {
                 name: name.trim(),
                 role,
                 phone: phone.trim(),
                 pay: parseBRL(pay),
-              }).then(() => {
-                setName("");
-                setPhone("");
-                setPay("");
-                setOpen(false);
-              });
+              };
+              const run = editing === "new" ? addStaff(payload) : saveStaff({ id: editing.id, ...payload });
+              void run.then(reset);
             }}
           >
-            <h2 className="text-lg font-semibold">Novo professor</h2>
+            <h2 className="text-lg font-semibold">{editing === "new" ? "Novo professor" : "Editar professor"}</h2>
             <div className="mt-4 grid gap-3">
               <Field label="Nome">
                 <Input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -109,7 +136,7 @@ function ProfessoresBody() {
             </div>
             <div className="mt-5 flex gap-2">
               <Button type="submit">Salvar</Button>
-              <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+              <Button type="button" variant="ghost" onClick={reset}>
                 Cancelar
               </Button>
             </div>

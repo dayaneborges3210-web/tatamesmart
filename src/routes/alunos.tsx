@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Shell } from "@/components/shell";
 import { Badge, Button, Field, Input } from "@/components/ui";
+import { DueDayPicker } from "@/components/due-day";
 import { type Belt, type Modality, type Student, useDojo } from "@/lib/dojo-store";
 import { BELTS, clampDegree, formatBelt, maxDegree, STUDENT_DOCS } from "@/lib/dojo-types";
 import { brl, formatDatePt } from "@/lib/money";
@@ -50,9 +51,10 @@ async function addressFromCep(cep: string) {
 }
 
 function AlunosBody() {
-  const { students, classes, plans, addStudent, saveStudent } = useDojo();
+  const { students, classes, plans, addStudent, saveStudent, deleteStudent } = useDojo();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [ficha, setFicha] = useState<Student | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -67,6 +69,7 @@ function AlunosBody() {
   const [degree, setDegree] = useState(0);
   const [birth, setBirth] = useState("");
   const [planId, setPlanId] = useState("");
+  const [dueDay, setDueDay] = useState(10);
   const [trial, setTrial] = useState(false);
   const [docs, setDocs] = useState<string[]>([]);
 
@@ -99,9 +102,41 @@ function AlunosBody() {
     setDegree(0);
     setBirth("");
     setPlanId("");
+    setDueDay(10);
     setTrial(false);
     setDocs([]);
+    setEditingId(null);
     setOpen(false);
+  }
+
+  function fillStudent(s: Student) {
+    setEditingId(s.id);
+    setName(s.name);
+    setPhone(s.phone);
+    setCpf(s.cpf);
+    setAddress(s.address);
+    setCep(s.cep);
+    setCepHint("");
+    setHasHealth(s.hasHealth);
+    setHealthNote(s.healthNote);
+    setClassId(s.classId || classes[0]?.id || "c1");
+    setBelt(s.belt);
+    setDegree(s.degree);
+    setBirth(s.birth);
+    setPlanId(s.planId);
+    setDueDay(s.dueDay || 10);
+    setTrial(s.status === "trial");
+    setDocs([...s.docs]);
+    setFicha(null);
+    setOpen(true);
+  }
+
+  function removeStudent(s: Student) {
+    if (!window.confirm(`Excluir ${s.name}? Mensalidades em aberto deste aluno saem junto.`)) return;
+    void deleteStudent(s.id).then(() => {
+      if (ficha?.id === s.id) setFicha(null);
+      if (editingId === s.id) resetForm();
+    });
   }
 
   async function onCep(value: string) {
@@ -151,8 +186,10 @@ function AlunosBody() {
               <th className="px-4 py-3 font-medium">CPF</th>
               <th className="px-4 py-3 font-medium">Turma</th>
               <th className="px-4 py-3 font-medium">Plano</th>
+              <th className="px-4 py-3 font-medium">Vence</th>
               <th className="px-4 py-3 font-medium">Saúde</th>
               <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium"> </th>
             </tr>
           </thead>
           <tbody>
@@ -172,6 +209,7 @@ function AlunosBody() {
                   <td className="px-4 py-3 tabular text-muted">{s.cpf || "—"}</td>
                   <td className="px-4 py-3 text-muted">{turma?.name ?? "—"}</td>
                   <td className="px-4 py-3 text-muted">{plans.find((p) => p.id === s.planId)?.name ?? "—"}</td>
+                  <td className="px-4 py-3 tabular text-muted">dia {s.dueDay || 10}</td>
                   <td className="px-4 py-3">
                     {s.hasHealth ? <Badge tone="warning">Restrição</Badge> : <Badge>Nenhuma</Badge>}
                   </td>
@@ -181,6 +219,16 @@ function AlunosBody() {
                     >
                       {s.status}
                     </Badge>
+                  </td>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-1">
+                      <Button type="button" variant="ghost" onClick={() => fillStudent(s)}>
+                        Editar
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={() => removeStudent(s)}>
+                        Excluir
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -200,7 +248,7 @@ function AlunosBody() {
               e.preventDefault();
               if (!name.trim() || !cpf.trim() || !cep.trim() || !address.trim()) return;
               if (hasHealth && !healthNote.trim()) return;
-              void addStudent({
+              const payload = {
                 name: name.trim(),
                 phone,
                 classId,
@@ -214,13 +262,17 @@ function AlunosBody() {
                 healthNote,
                 birth,
                 planId,
-                dueDay: plans.find((p) => p.id === planId)?.dueDay ?? 10,
+                dueDay,
                 docs,
-                status: trial ? "trial" : "ativo",
-              }).then(resetForm);
+                status: (trial ? "trial" : "ativo") as Student["status"],
+              };
+              const run = editingId
+                ? saveStudent({ id: editingId, ...payload })
+                : addStudent(payload);
+              void run.then(resetForm);
             }}
           >
-            <h2 className="text-lg font-semibold">Novo aluno</h2>
+            <h2 className="text-lg font-semibold">{editingId ? "Editar aluno" : "Novo aluno"}</h2>
             <div className="mt-4 grid gap-3">
               <Field label="Nome">
                 <Input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -313,7 +365,12 @@ function AlunosBody() {
                 <select
                   className="min-h-11 w-full rounded-sm border border-border bg-bg px-3 text-sm text-fg"
                   value={planId}
-                  onChange={(e) => setPlanId(e.target.value)}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setPlanId(id);
+                    const plan = plans.find((p) => p.id === id);
+                    if (plan) setDueDay(plan.dueDay);
+                  }}
                 >
                   <option value="">Sem plano — valor padrão da modalidade</option>
                   {plans.map((p) => (
@@ -322,6 +379,9 @@ function AlunosBody() {
                     </option>
                   ))}
                 </select>
+              </Field>
+              <Field label="Melhor dia de pagamento">
+                <DueDayPicker value={dueDay} onChange={setDueDay} />
               </Field>
               <label className="flex min-h-11 items-center gap-2 text-sm">
                 <input type="checkbox" checked={trial} onChange={(e) => setTrial(e.target.checked)} />
@@ -410,6 +470,7 @@ function AlunosBody() {
               />
               <Row label="Faixa" value={formatBelt(ficha.belt, ficha.degree)} />
               <Row label="Plano" value={plans.find((p) => p.id === ficha.planId)?.name ?? "—"} />
+              <Row label="Vencimento" value={`Todo dia ${ficha.dueDay || 10}`} />
               <Row label="Nascimento" value={ficha.birth ? formatDatePt(ficha.birth) : "—"} />
               <Row label="Desde" value={formatDatePt(ficha.joined)} />
               <div>
@@ -438,7 +499,13 @@ function AlunosBody() {
                 </ul>
               </div>
             </dl>
-            <div className="mt-5">
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button type="button" onClick={() => fillStudent(ficha)}>
+                Editar
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => removeStudent(ficha)}>
+                Excluir
+              </Button>
               <Button type="button" variant="ghost" onClick={() => setFicha(null)}>
                 Fechar
               </Button>

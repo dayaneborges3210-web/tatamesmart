@@ -5,7 +5,7 @@ import { Badge, Button, Field, Input } from "@/components/ui";
 import { useDojo } from "@/lib/dojo-store";
 import type { StockItem } from "@/lib/dojo-types";
 import { brl, formatDatePt, parseBRL, todayISO } from "@/lib/money";
-import { printRaw, receiptVenda } from "@/lib/thermal";
+import { printA4, receiptVenda } from "@/lib/thermal";
 
 export const Route = createFileRoute("/loja")({ component: LojaPage });
 
@@ -26,10 +26,10 @@ export function LojaPage() {
 }
 
 function LojaBody() {
-  const { stock, students, sales, sellStock, saveStock, deleteStock, school } = useDojo();
+  const { stock, students, sales, sellStock, addStock, saveStock, deleteStock, school } = useDojo();
   const today = todayISO();
   const [pick, setPick] = useState<StockItem | null>(null);
-  const [edit, setEdit] = useState<StockItem | null>(null);
+  const [edit, setEdit] = useState<StockItem | "new" | null>(null);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("Faixa");
   const [editQty, setEditQty] = useState("1");
@@ -57,8 +57,22 @@ function LojaBody() {
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Balcão</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Loja</h1>
-          <p className="mt-1 text-sm text-muted">Venda faixa, kimono e luva. Baixa o estoque na hora.</p>
+          <p className="mt-1 text-sm text-muted">Cadastre o produto e venda no balcão. A baixa sai do estoque na hora.</p>
         </div>
+        <Button
+          type="button"
+          onClick={() => {
+            setEdit("new");
+            setName("");
+            setCategory("Faixa");
+            setEditQty("1");
+            setMinQty("2");
+            setCost("");
+            setPrice("");
+          }}
+        >
+          Novo produto
+        </Button>
       </div>
 
       <section className="mt-6 grid grid-cols-2 gap-3">
@@ -74,6 +88,27 @@ function LojaBody() {
       </section>
 
       <h2 className="mt-8 text-sm font-semibold">Produtos</h2>
+      {stock.length === 0 ? (
+        <div className="mt-3 rounded-lg border border-dashed border-border bg-surface p-6">
+          <p className="text-sm font-medium">Nenhum produto cadastrado</p>
+          <p className="mt-1 text-sm text-muted">Cadastre faixa, kimono, luva ou o que a academia vende. Depois é só clicar em Vender.</p>
+          <Button
+            type="button"
+            className="mt-4"
+            onClick={() => {
+              setEdit("new");
+              setName("");
+              setCategory("Faixa");
+              setEditQty("1");
+              setMinQty("2");
+              setCost("");
+              setPrice("");
+            }}
+          >
+            Novo produto
+          </Button>
+        </div>
+      ) : null}
       <ul className="mt-3 grid gap-2 sm:grid-cols-2">
         {stock.map((item) => {
           const empty = item.qty <= 0;
@@ -150,7 +185,7 @@ function LojaBody() {
                   type="button"
                   variant="ghost"
                   onClick={() => {
-                    void printRaw(
+                    printA4(
                       receiptVenda({
                         school: school || "TatameSmart",
                         item: s.itemName,
@@ -160,7 +195,7 @@ function LojaBody() {
                         aluno: aluno?.name ?? "Balcão",
                         soldOn: formatDatePt(s.soldOn),
                       }),
-                    ).catch(() => undefined);
+                    );
                   }}
                 >
                   Imprimir
@@ -182,7 +217,7 @@ function LojaBody() {
               setBusy(true);
               void sellStock({ itemId: pick.id, studentId, qty: n, payMethod: pay }).then(() => {
                 const aluno = students.find((s) => s.id === studentId);
-                void printRaw(
+                printA4(
                   receiptVenda({
                     school: school || "TatameSmart",
                     item: pick.name,
@@ -192,7 +227,7 @@ function LojaBody() {
                     aluno: aluno?.name ?? "Balcão",
                     soldOn: formatDatePt(today),
                   }),
-                ).catch(() => undefined);
+                );
                 setBusy(false);
                 close();
               });
@@ -261,18 +296,19 @@ function LojaBody() {
             onSubmit={(e) => {
               e.preventDefault();
               if (!name.trim()) return;
-              void saveStock({
-                id: edit.id,
+              const payload = {
                 name: name.trim(),
                 category,
                 qty: Math.max(0, Number(editQty) || 0),
                 minQty: Math.max(0, Number(minQty) || 0),
                 unitCost: parseBRL(cost),
                 price: parseBRL(price),
-              }).then(() => setEdit(null));
+              };
+              const run = edit === "new" ? addStock(payload) : saveStock({ id: edit.id, ...payload });
+              void run.then(() => setEdit(null));
             }}
           >
-            <h2 className="text-lg font-semibold">Editar {edit.name}</h2>
+            <h2 className="text-lg font-semibold">{edit === "new" ? "Novo produto" : `Editar ${edit.name}`}</h2>
             <div className="mt-4 grid gap-3">
               <Field label="Nome">
                 <Input value={name} onChange={(e) => setName(e.target.value)} required />

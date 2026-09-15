@@ -2,7 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Shell } from "@/components/shell";
 import { Button, Field, Input } from "@/components/ui";
+import { DueDayPicker } from "@/components/due-day";
 import { useDojo } from "@/lib/dojo-store";
+import type { Plan } from "@/lib/dojo-types";
 import { brl, parseBRL } from "@/lib/money";
 
 export const Route = createFileRoute("/planos")({ component: PlanosPage });
@@ -14,6 +16,11 @@ const DURATIONS = [
   { n: 12, label: "Anual (12 meses)" },
 ];
 
+function centsField(cents: number) {
+  if (!cents) return "";
+  return (cents / 100).toFixed(2).replace(".", ",");
+}
+
 export function PlanosPage() {
   return (
     <Shell>
@@ -23,14 +30,14 @@ export function PlanosPage() {
 }
 
 function PlanosBody() {
-  const { plans, students, addPlan } = useDojo();
-  const [open, setOpen] = useState(false);
+  const { plans, students, addPlan, savePlan, deletePlan } = useDojo();
+  const [editing, setEditing] = useState<Plan | "new" | null>(null);
   const [name, setName] = useState("");
   const [duration, setDuration] = useState(1);
   const [billing, setBilling] = useState<"mensal" | "unico">("mensal");
   const [amount, setAmount] = useState("180,00");
   const [weekly, setWeekly] = useState("0");
-  const [dueDay, setDueDay] = useState("10");
+  const [dueDay, setDueDay] = useState(10);
 
   const total = parseBRL(amount) * (billing === "mensal" ? duration : 1);
 
@@ -40,8 +47,18 @@ function PlanosBody() {
     setBilling("mensal");
     setAmount("180,00");
     setWeekly("0");
-    setDueDay("10");
-    setOpen(false);
+    setDueDay(10);
+    setEditing(null);
+  }
+
+  function openEdit(p: Plan) {
+    setEditing(p);
+    setName(p.name);
+    setDuration(p.durationMonths);
+    setBilling(p.billing);
+    setAmount(centsField(p.amount) || "0,00");
+    setWeekly(String(p.weeklyLimit));
+    setDueDay(p.dueDay);
   }
 
   return (
@@ -52,7 +69,7 @@ function PlanosBody() {
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Planos</h1>
           <p className="mt-1 text-sm text-muted">O mestre cria o plano. Na matrícula o aluno entra nele — a mensalidade nasce sozinha.</p>
         </div>
-        <Button type="button" onClick={() => setOpen(true)}>
+        <Button type="button" onClick={() => setEditing("new")}>
           Novo plano
         </Button>
       </div>
@@ -77,30 +94,46 @@ function PlanosBody() {
                   {p.weeklyLimit ? `${p.weeklyLimit} treinos por semana` : "Treinos livres"}
                 </p>
                 <p className="mt-4 text-sm text-muted">{count} aluno{count === 1 ? "" : "s"} neste plano</p>
+                <div className="mt-4 flex gap-1">
+                  <Button type="button" variant="ghost" onClick={() => openEdit(p)}>
+                    Editar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      if (window.confirm(`Excluir o plano ${p.name}? Alunos ficam sem plano.`)) void deletePlan(p.id);
+                    }}
+                  >
+                    Excluir
+                  </Button>
+                </div>
               </li>
             );
           })}
         </ul>
       )}
 
-      {open ? (
+      {editing ? (
         <div className="fixed inset-0 z-50 grid place-items-end bg-bg/70 p-0 md:place-items-center md:p-6">
           <form
             className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-xl border border-border bg-surface p-5 md:rounded-lg"
             onSubmit={(e) => {
               e.preventDefault();
               if (!name.trim() || parseBRL(amount) <= 0) return;
-              void addPlan({
+              const payload = {
                 name: name.trim(),
                 durationMonths: duration,
                 billing,
                 amount: parseBRL(amount),
                 weeklyLimit: Number(weekly) || 0,
-                dueDay: Number(dueDay) || 10,
-              }).then(reset);
+                dueDay,
+              };
+              const run = editing === "new" ? addPlan(payload) : savePlan({ id: editing.id, ...payload });
+              void run.then(reset);
             }}
           >
-            <h2 className="text-lg font-semibold">Novo plano</h2>
+            <h2 className="text-lg font-semibold">{editing === "new" ? "Novo plano" : "Editar plano"}</h2>
             <div className="mt-4 grid gap-3">
               <Field label="Nome do plano">
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jiu-jitsu 2x na semana" required />
@@ -139,12 +172,12 @@ function PlanosBody() {
               <Field label="Limite semanal de treinos (0 = livre)">
                 <Input value={weekly} onChange={(e) => setWeekly(e.target.value)} inputMode="numeric" />
               </Field>
-              <Field label="Dia de vencimento">
-                <Input value={dueDay} onChange={(e) => setDueDay(e.target.value)} inputMode="numeric" />
+              <Field label="Melhor dia de pagamento">
+                <DueDayPicker value={dueDay} onChange={setDueDay} />
               </Field>
             </div>
             <div className="mt-5 flex gap-2">
-              <Button type="submit">Criar</Button>
+              <Button type="submit">Salvar</Button>
               <Button type="button" variant="ghost" onClick={reset}>
                 Cancelar
               </Button>

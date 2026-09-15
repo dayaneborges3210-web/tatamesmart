@@ -49,7 +49,7 @@ export function TurmasPage() {
 }
 
 function TurmasBody() {
-  const { classes, students, staff, addClass, saveClass } = useDojo();
+  const { classes, students, staff, addClass, saveClass, deleteClass } = useDojo();
   const [draft, setDraft] = useState<Draft | null>(null);
 
   function toggleDay(day: string) {
@@ -134,10 +134,10 @@ function TurmasBody() {
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-2">
                 <div className="h-full bg-accent" style={{ width: `${Math.min(100, (count / c.capacity) * 100)}%` }} />
               </div>
+              <div className="mt-4 flex gap-1">
               <Button
                 type="button"
                 variant="ghost"
-                className="mt-4"
                 onClick={() =>
                   setDraft({
                     id: c.id,
@@ -151,8 +151,18 @@ function TurmasBody() {
                   })
                 }
               >
-                Dias e horário
+                Editar
               </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  if (window.confirm(`Excluir a turma ${c.name}? Alunos ficam sem turma.`)) void deleteClass(c.id);
+                }}
+              >
+                Excluir
+              </Button>
+              </div>
             </li>
           );
         })}
@@ -178,7 +188,7 @@ function TurmasBody() {
               void run.then(() => setDraft(null));
             }}
           >
-            <h2 className="text-lg font-semibold">{draft.id ? "Dias da turma" : "Nova turma"}</h2>
+            <h2 className="text-lg font-semibold">{draft.id ? "Editar turma" : "Nova turma"}</h2>
             <div className="mt-4 grid gap-3">
               <Field label="Nome">
                 <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} required />

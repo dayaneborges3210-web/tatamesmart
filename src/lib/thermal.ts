@@ -1,25 +1,5 @@
-const KEY = "tatamesmart.printerAgent";
-const DEFAULT_AGENT = "http://127.0.0.1:17891";
-
-export function printerAgentUrl() {
-  try {
-    return (localStorage.getItem(KEY) || DEFAULT_AGENT).replace(/\/$/, "");
-  } catch {
-    return DEFAULT_AGENT;
-  }
-}
-
-export function setPrinterAgentUrl(url: string) {
-  localStorage.setItem(KEY, url.trim().replace(/\/$/, "") || DEFAULT_AGENT);
-}
-
-function pad(line: string, width = 48) {
-  const t = line.length > width ? line.slice(0, width) : line;
-  return t;
-}
-
-function dash(width = 48) {
-  return "-".repeat(width);
+function dash() {
+  return "————————————————";
 }
 
 export function receiptMensalidade(opts: {
@@ -34,17 +14,17 @@ export function receiptMensalidade(opts: {
     opts.school.toUpperCase(),
     "TatameSmart",
     dash(),
-    "RECIBO DE MENSALIDADE",
+    "Recibo de mensalidade",
     dash(),
     `Aluno: ${opts.aluno}`,
-    `Competencia: ${opts.month}`,
+    `Competência: ${opts.month}`,
     `Vencimento: ${opts.due}`,
     `Valor: ${opts.amount}`,
     `Pago em: ${opts.paidAt}`,
     dash(),
     "Pagamento recebido.",
     "Obrigado. Oss.",
-  ].map((l) => pad(l));
+  ];
 }
 
 export function receiptVenda(opts: {
@@ -60,7 +40,7 @@ export function receiptVenda(opts: {
     opts.school.toUpperCase(),
     "TatameSmart",
     dash(),
-    "CUPOM DE VENDA",
+    "Recibo de venda",
     dash(),
     `Item: ${opts.item}`,
     `Qtd: ${opts.qty}`,
@@ -70,25 +50,36 @@ export function receiptVenda(opts: {
     `Data: ${opts.soldOn}`,
     dash(),
     "Obrigado. Oss.",
-  ].map((l) => pad(l));
+  ];
 }
 
-export async function printRaw(lines: string[]) {
-  const url = printerAgentUrl();
-  const res = await fetch(`${url}/print`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ lines, cut: true }),
+export function printA4(lines: string[]) {
+  const win = window.open("", "_blank", "noopener,noreferrer,width=800,height=900");
+  if (!win) throw new Error("O navegador bloqueou a janela de impressão. Permita pop-ups neste site.");
+  const doc = win.document;
+  doc.title = "Imprimir A4";
+  const style = doc.createElement("style");
+  style.textContent = [
+    "@page { size: A4; margin: 18mm; }",
+    "body { margin: 0; color: #111; background: #fff; font: 16px/1.5 'IBM Plex Sans', 'Segoe UI', sans-serif; }",
+    "main { max-width: 180mm; margin: 0 auto; padding: 8mm 0; }",
+    "h1 { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 16px; color: #555; }",
+    "p { margin: 0 0 6px; white-space: pre-wrap; }",
+    "p.lead { font-size: 22px; font-weight: 600; }",
+  ].join("\n");
+  doc.head.appendChild(style);
+  const main = doc.createElement("main");
+  const h = doc.createElement("h1");
+  h.textContent = "Folha A4";
+  main.appendChild(h);
+  lines.forEach((line, i) => {
+    const p = doc.createElement("p");
+    if (i === 0) p.className = "lead";
+    p.textContent = line;
+    main.appendChild(p);
   });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(t || `Agente recusou a impressão (${res.status}).`);
-  }
+  doc.body.appendChild(main);
+  win.focus();
+  win.print();
 }
 
-export async function pingPrinter() {
-  const url = printerAgentUrl();
-  const res = await fetch(`${url}/health`);
-  if (!res.ok) throw new Error("Agente offline.");
-  return (await res.json()) as { ok: boolean; printer?: string };
-}

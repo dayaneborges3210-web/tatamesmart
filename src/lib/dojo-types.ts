@@ -97,15 +97,26 @@ export function parseDocs(raw: string | null | undefined) {
     .filter((id) => STUDENT_DOCS.some((d) => d.id === id));
 }
 
+export function clampDueDay(dueDay: number) {
+  return Math.min(31, Math.max(1, Math.round(dueDay) || 10));
+}
+
+export function dueDateInMonth(month: string, dueDay: number) {
+  const [y, m] = month.split("-").map(Number);
+  const last = new Date(y, m, 0).getDate();
+  const day = Math.min(last, clampDueDay(dueDay));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${y}-${pad(m)}-${pad(day)}`;
+}
+
 export function nextDueFromDay(dueDay: number, from: string) {
-  const day = Math.min(28, Math.max(1, Math.round(dueDay) || 10));
   const [y, m] = from.split("-").map(Number);
   const pad = (n: number) => String(n).padStart(2, "0");
-  const thisMonth = `${y}-${pad(m)}-${pad(day)}`;
+  const thisMonth = dueDateInMonth(`${y}-${pad(m)}`, dueDay);
   if (thisMonth > from) return thisMonth;
   const nm = m === 12 ? 1 : m + 1;
   const ny = m === 12 ? y + 1 : y;
-  return `${ny}-${pad(nm)}-${pad(day)}`;
+  return dueDateInMonth(`${ny}-${pad(nm)}`, dueDay);
 }
 
 export type ClassGroup = {
