@@ -45,12 +45,12 @@ test('concurrent invoice reservations are unique and isolated by tenant and day'
     assert.equal((await reserve('a','2026-09-14')).rows.length,1);
   } finally { await db.close(); }
 });
-test('academies receive their own token, never the platform token', async () => {
+test('academies receive their own token and QR instance, never METALCORE', async () => {
   const instances = new Map();
   const created = [];
   const sql = async (parts,...args) => {
     const q = parts.join('?');
-    if(q.includes('select wa_url, wa_instance')) return [{wa_url:'http://129.121.55.118',wa_instance:'mother',wa_token:'GLOBAL',owner_user_id:'owner'}];
+    if(q.includes('select wa_url, wa_instance')) return [{wa_url:'https://whatsapp.metalcoreerp.com.br',wa_instance:'',wa_token:'GLOBAL',owner_user_id:'owner'}];
     if(q.includes('select user_id from schools')) return [{user_id:args[0]}];
     if(q.includes('insert into wa_school_instances')) { if(!instances.has(args[0])) instances.set(args[0],{instance_name:args[1],instance_token:args[2],provisioned:false});return []; }
     if(q.includes('select instance_name')) return [instances.get(args[0])];
@@ -63,7 +63,7 @@ test('academies receive their own token, never the platform token', async () => 
     '@/lib/db':{getSql:async()=>sql},
     '@/lib/site':{isMaeEmail:()=>false,PLATFORM_OWNER_EMAIL:'owner@example.com'},
     '@/lib/whatsapp':{normalizeEvolutionUrl:x=>x,instanceNameFor:id=>'ts'+id,
-      createEvolutionInstance:async opts=>{created.push(opts);assert.equal(opts.token,'GLOBAL');assert.notEqual(opts.instanceToken,'GLOBAL');},
+      createEvolutionInstance:async opts=>{created.push(opts);assert.equal(opts.token,'GLOBAL');assert.notEqual(opts.instanceToken,'GLOBAL');assert.notEqual(opts.instance,'METALCORE');},
       evolutionState:async opts=>{assert.notEqual(opts.token,'GLOBAL');return 'close';}},
   });
   const a=await api.ensureSchoolWa('a');const b=await api.ensureSchoolWa('b');
@@ -71,3 +71,4 @@ test('academies receive their own token, never the platform token', async () => 
   assert.equal((await api.ensureSchoolWa('a')).token,a.token);
   assert.equal(created.length,2);
 });
+

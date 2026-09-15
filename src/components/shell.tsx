@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Building2, CalendarCheck, CreditCard, LayoutGrid, Users, Dumbbell, Wallet, CalendarClock, Settings, UserRound, Package, BarChart3, ShoppingBag, Trophy, LogOut } from "lucide-react";
+import { Building2, CalendarCheck, CreditCard, LayoutGrid, Users, Dumbbell, Wallet, CalendarClock, Settings, UserRound, Package, BarChart3, ShoppingBag, Trophy, LogOut, Layers } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { signOut } from "@/lib/auth/client";
@@ -18,6 +18,7 @@ const NAV = [
   { to: "/contas", label: "Contas a pagar", icon: Wallet },
   { to: "/agenda", label: "Agenda", icon: CalendarClock },
   { to: "/alunos", label: "Alunos", icon: Users },
+  { to: "/planos", label: "Planos", icon: Layers },
   { to: "/turmas", label: "Turmas", icon: Dumbbell },
   { to: "/professores", label: "Professores", icon: UserRound },
   { to: "/estoque", label: "Estoque", icon: Package },

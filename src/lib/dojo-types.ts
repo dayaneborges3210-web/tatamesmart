@@ -65,7 +65,48 @@ export type Student = {
   cep: string;
   hasHealth: boolean;
   healthNote: string;
+  birth: string;
+  planId: string;
+  dueDay: number;
+  docs: string[];
 };
+
+export type Plan = {
+  id: string;
+  name: string;
+  durationMonths: number;
+  billing: "mensal" | "unico";
+  amount: number;
+  weeklyLimit: number;
+  dueDay: number;
+};
+
+export const STUDENT_DOCS = [
+  { id: "contrato", label: "Contrato de prestação de serviços" },
+  { id: "risco", label: "Termo de assunção de risco" },
+  { id: "parq", label: "PAR-Q" },
+  { id: "menor", label: "Autorização de menor de idade" },
+  { id: "imagem", label: "Termo de uso de imagem" },
+  { id: "atestado", label: "Atestado médico" },
+] as const;
+
+export function parseDocs(raw: string | null | undefined) {
+  return (raw ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter((id) => STUDENT_DOCS.some((d) => d.id === id));
+}
+
+export function nextDueFromDay(dueDay: number, from: string) {
+  const day = Math.min(28, Math.max(1, Math.round(dueDay) || 10));
+  const [y, m] = from.split("-").map(Number);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const thisMonth = `${y}-${pad(m)}-${pad(day)}`;
+  if (thisMonth > from) return thisMonth;
+  const nm = m === 12 ? 1 : m + 1;
+  const ny = m === 12 ? y + 1 : y;
+  return `${ny}-${pad(nm)}-${pad(day)}`;
+}
 
 export type ClassGroup = {
   id: string;
@@ -199,4 +240,5 @@ export type DojoSnapshot = {
   stock: StockItem[];
   sales: Sale[];
   championships: Championship[];
+  plans: Plan[];
 };

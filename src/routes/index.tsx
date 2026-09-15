@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { Landing } from "@/components/landing";
 import { Shell } from "@/components/shell";
 import { Badge } from "@/components/ui";
+import { authClient, getBearerToken } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { invoiceStatus, phaseFor, phaseLabel } from "@/lib/cobranca";
 import { useDojo } from "@/lib/dojo-store";
@@ -11,7 +13,35 @@ export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
   const { user, isPending } = useCurrentUserState();
-  if (isPending) {
+  const [hold, setHold] = useState(() => Boolean(typeof window !== "undefined" && getBearerToken()));
+
+  useEffect(() => {
+    if (user) {
+      setHold(false);
+      return;
+    }
+    if (!getBearerToken()) {
+      setHold(false);
+      return;
+    }
+    setHold(true);
+    let n = 0;
+    const tick = () => {
+      n += 1;
+      void authClient.getSession();
+      try {
+        authClient.$store.notify("$sessionSignal");
+      } catch {
+        /* older client */
+      }
+      if (n >= 10) setHold(false);
+    };
+    tick();
+    const t = window.setInterval(tick, 250);
+    return () => window.clearInterval(t);
+  }, [user]);
+
+  if (isPending || (hold && !user)) {
     return <div className="min-h-dvh bg-bg" />;
   }
   if (!user) return <Landing />;
@@ -46,6 +76,22 @@ function Dashboard() {
   const receita = paidSum + shopSum;
   const queue = billed.filter((b) => b.status !== "paga" && b.phase && !b.sentToday);
   const stockLow = stock.filter((s) => s.qty <= s.minQty).length;
+  const billedCount = billed.length;
+  const latePct = billedCount ? Math.round((late.length / billedCount) * 100) : 0;
+  const trials = students.filter((s) => s.status === "trial");
+  const birthdays = students.filter((s) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s.birth)) return false;
+    const mmdd = s.birth.slice(5);
+    let next = `${today.slice(0, 4)}-${mmdd}`;
+    if (next < today) next = `${Number(today.slice(0, 4)) + 1}-${mmdd}`;
+    const n = daysUntil(next, today);
+    return n >= 0 && n <= 7;
+  });
+  const ready = students.filter((s) => {
+    if (s.status !== "ativo") return false;
+    if (s.belt === "Preta" || s.belt === "Coral" || s.belt === "Vermelha") return false;
+    return daysUntil(today, s.joined) >= 120;
+  });
 
   return (
     <>
@@ -67,6 +113,13 @@ function Dashboard() {
         <Kpi label="Atrasadas" value={String(late.length)} hint={late.length ? brl(late.reduce((n, b) => n + b.inv.amount, 0)) : "Em dia"} danger={late.length > 0} />
         <Kpi label="Disparos hoje" value={String(queue.length)} hint="Régua D-5 até atraso" />
         <Kpi label="Alunos ativos" value={String(active)} hint={stockLow ? `${stockLow} itens baixos no estoque` : `${present} presentes · ${todayClasses.length} aulas`} danger={stockLow > 0} />
+      </section>
+
+      <section className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi label="Inadimplência" value={`${latePct}%`} hint={late.length ? `${late.length} atrasadas` : "Em dia"} danger={latePct >= 20} />
+        <Kpi label="Experimentais" value={String(trials.length)} hint={trials.length ? "Converter em aluno" : "Nenhuma aula teste"} />
+        <Kpi label="Aniversários (7 dias)" value={String(birthdays.length)} hint={birthdays[0]?.name ?? "Ninguém esta semana"} />
+        <Kpi label="Prontos a graduar" value={String(ready.length)} hint={ready.length ? "4 meses ou mais na faixa" : "Ninguém na fila"} />
       </section>
 
       <section className="mt-8 grid gap-4 lg:grid-cols-2">

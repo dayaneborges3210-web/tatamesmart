@@ -3,8 +3,8 @@ import { useMemo, useState } from "react";
 import { Shell } from "@/components/shell";
 import { Badge, Button, Field, Input } from "@/components/ui";
 import { type Belt, type Modality, type Student, useDojo } from "@/lib/dojo-store";
-import { BELTS, clampDegree, formatBelt, maxDegree } from "@/lib/dojo-types";
-import { formatDatePt } from "@/lib/money";
+import { BELTS, clampDegree, formatBelt, maxDegree, STUDENT_DOCS } from "@/lib/dojo-types";
+import { brl, formatDatePt } from "@/lib/money";
 
 export const Route = createFileRoute("/alunos")({ component: AlunosPage });
 
@@ -50,7 +50,7 @@ async function addressFromCep(cep: string) {
 }
 
 function AlunosBody() {
-  const { students, classes, addStudent } = useDojo();
+  const { students, classes, plans, addStudent, saveStudent } = useDojo();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [ficha, setFicha] = useState<Student | null>(null);
@@ -65,6 +65,10 @@ function AlunosBody() {
   const [classId, setClassId] = useState(classes[0]?.id ?? "c1");
   const [belt, setBelt] = useState<Belt>("Branca");
   const [degree, setDegree] = useState(0);
+  const [birth, setBirth] = useState("");
+  const [planId, setPlanId] = useState("");
+  const [trial, setTrial] = useState(false);
+  const [docs, setDocs] = useState<string[]>([]);
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -93,6 +97,10 @@ function AlunosBody() {
     setHealthNote("");
     setBelt("Branca");
     setDegree(0);
+    setBirth("");
+    setPlanId("");
+    setTrial(false);
+    setDocs([]);
     setOpen(false);
   }
 
@@ -119,7 +127,7 @@ function AlunosBody() {
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Cadastro</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Alunos</h1>
-          <p className="mt-1 text-sm text-muted">CPF, endereço, CEP e ficha de saúde na matrícula.</p>
+          <p className="mt-1 text-sm text-muted">Matrícula com plano, turma, faixa, documentos e ficha de saúde.</p>
         </div>
         <Button type="button" onClick={() => setOpen(true)}>
           Novo aluno
@@ -142,6 +150,7 @@ function AlunosBody() {
               <th className="px-4 py-3 font-medium">Faixa</th>
               <th className="px-4 py-3 font-medium">CPF</th>
               <th className="px-4 py-3 font-medium">Turma</th>
+              <th className="px-4 py-3 font-medium">Plano</th>
               <th className="px-4 py-3 font-medium">Saúde</th>
               <th className="px-4 py-3 font-medium">Status</th>
             </tr>
@@ -162,6 +171,7 @@ function AlunosBody() {
                   <td className="px-4 py-3 text-muted">{formatBelt(s.belt, s.degree)}</td>
                   <td className="px-4 py-3 tabular text-muted">{s.cpf || "—"}</td>
                   <td className="px-4 py-3 text-muted">{turma?.name ?? "—"}</td>
+                  <td className="px-4 py-3 text-muted">{plans.find((p) => p.id === s.planId)?.name ?? "—"}</td>
                   <td className="px-4 py-3">
                     {s.hasHealth ? <Badge tone="warning">Restrição</Badge> : <Badge>Nenhuma</Badge>}
                   </td>
@@ -202,6 +212,11 @@ function AlunosBody() {
                 cep,
                 hasHealth,
                 healthNote,
+                birth,
+                planId,
+                dueDay: plans.find((p) => p.id === planId)?.dueDay ?? 10,
+                docs,
+                status: trial ? "trial" : "ativo",
               }).then(resetForm);
             }}
           >
@@ -291,6 +306,45 @@ function AlunosBody() {
                 </Field>
               </div>
 
+              <Field label="Nascimento">
+                <Input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} />
+              </Field>
+              <Field label="Plano">
+                <select
+                  className="min-h-11 w-full rounded-sm border border-border bg-bg px-3 text-sm text-fg"
+                  value={planId}
+                  onChange={(e) => setPlanId(e.target.value)}
+                >
+                  <option value="">Sem plano — valor padrão da modalidade</option>
+                  {plans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} · {brl(p.amount)} · dia {p.dueDay}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <label className="flex min-h-11 items-center gap-2 text-sm">
+                <input type="checkbox" checked={trial} onChange={(e) => setTrial(e.target.checked)} />
+                Aula experimental
+              </label>
+              <fieldset>
+                <legend className="mb-2 text-xs font-medium text-muted">Documentos solicitados</legend>
+                <div className="grid gap-2">
+                  {STUDENT_DOCS.map((d) => (
+                    <label key={d.id} className="flex min-h-11 items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={docs.includes(d.id)}
+                        onChange={(e) =>
+                          setDocs(e.target.checked ? [...docs, d.id] : docs.filter((x) => x !== d.id))
+                        }
+                      />
+                      {d.label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
               <fieldset>
                 <legend className="mb-2 text-xs font-medium text-muted">Possui algum problema de saúde ou alergia?</legend>
                 <div className="grid grid-cols-2 gap-2">
@@ -355,7 +409,34 @@ function AlunosBody() {
                 value={ficha.hasHealth ? ficha.healthNote || "Possui restrição" : "Nenhum informado"}
               />
               <Row label="Faixa" value={formatBelt(ficha.belt, ficha.degree)} />
+              <Row label="Plano" value={plans.find((p) => p.id === ficha.planId)?.name ?? "—"} />
+              <Row label="Nascimento" value={ficha.birth ? formatDatePt(ficha.birth) : "—"} />
               <Row label="Desde" value={formatDatePt(ficha.joined)} />
+              <div>
+                <p className="text-xs text-muted">Documentos</p>
+                <ul className="mt-2 grid gap-2">
+                  {STUDENT_DOCS.map((d) => {
+                    const on = ficha.docs.includes(d.id);
+                    return (
+                      <li key={d.id}>
+                        <button
+                          type="button"
+                          className="flex min-h-11 w-full items-center justify-between rounded-sm border border-border px-3 text-left text-sm"
+                          onClick={() => {
+                            const next = on ? ficha.docs.filter((x) => x !== d.id) : [...ficha.docs, d.id];
+                            void saveStudent({ id: ficha.id, docs: next }).then(() =>
+                              setFicha({ ...ficha, docs: next }),
+                            );
+                          }}
+                        >
+                          <span>{d.label}</span>
+                          <span className={on ? "text-success" : "text-muted"}>{on ? "Entregue" : "Pendente"}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </dl>
             <div className="mt-5">
               <Button type="button" variant="ghost" onClick={() => setFicha(null)}>

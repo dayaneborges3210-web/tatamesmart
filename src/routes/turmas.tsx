@@ -66,11 +66,55 @@ function TurmasBody() {
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Grade</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Turmas</h1>
-          <p className="mt-1 text-sm text-muted">Aqui você marca os dias de cada aula. A frequência usa essa grade.</p>
+          <p className="mt-1 text-sm text-muted">Dias, horário e professor. A frequência e a grade semanal usam isso.</p>
         </div>
         <Button type="button" onClick={() => setDraft({ ...EMPTY, instructor: staff[0]?.name ?? "" })}>
           Nova turma
         </Button>
+      </div>
+
+      <div className="mt-6 overflow-x-auto rounded-lg border border-border">
+        <table className="min-w-[720px] w-full text-sm">
+          <thead className="bg-surface text-left text-xs text-muted">
+            <tr>
+              <th className="px-3 py-3 font-medium">Horário</th>
+              {WEEKDAYS.map((d) => (
+                <th key={d} className="px-3 py-3 font-medium capitalize">
+                  {DAY_LABEL[d] ?? d}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from(new Set(classes.map((c) => c.time).sort())).map((slot) => (
+              <tr key={slot} className="border-t border-border align-top">
+                <td className="px-3 py-3 tabular text-muted">{slot}</td>
+                {WEEKDAYS.map((d) => {
+                  const cell = classes.filter((c) => c.time === slot && c.days.includes(d));
+                  return (
+                    <td key={d} className="px-2 py-2">
+                      {cell.map((c) => (
+                        <p key={c.id} className="mb-1 rounded-sm bg-surface-2 px-2 py-1 text-xs">
+                          <span className="font-medium">{c.name}</span>
+                          <span className="mt-0.5 block text-muted">
+                            {classHours(c.time, c.timeEnd)}
+                          </span>
+                        </p>
+                      ))}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            {classes.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-3 py-8 text-center text-muted">
+                  Nenhuma turma. Crie a primeira para montar a grade.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
       </div>
 
       <ul className="mt-6 grid gap-3 md:grid-cols-2">

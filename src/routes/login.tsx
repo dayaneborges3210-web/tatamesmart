@@ -1,6 +1,6 @@
-import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
+import { GROK_PROVIDERS, authClient, authEnabled, keepSessionToken, signIn } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button, Field, Input, PasswordInput } from "@/components/ui";
 import { keepPreviewSession, loginErrorMessage } from "@/lib/preview-session";
@@ -29,10 +29,11 @@ async function postEntrar(payload: {
 
 function Login() {
   const { user } = useCurrentUserState();
+  const navigate = useNavigate();
   const [mode, setMode] = useState<"entrar" | "criar" | "restaurar">("entrar");
   const [school, setSchool] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(import.meta.env.DEV ? "contato@smarttatame.com.br" : "");
+  const [password, setPassword] = useState(import.meta.env.DEV ? "TatameTest-Qr-2026" : "");
   const [confirm, setConfirm] = useState("");
   const [code, setCode] = useState("");
   const [resetStep, setResetStep] = useState<"email" | "code">("email");
@@ -43,6 +44,18 @@ function Login() {
 
   if (user) return <Navigate to="/" />;
 
+  async function finishLogin(token: string) {
+    keepSessionToken(token);
+    keepPreviewSession(token);
+    try {
+      await authClient.getSession();
+      authClient.$store.notify("$sessionSignal");
+    } catch {
+      /* bearer is enough for the next screen */
+    }
+    await navigate({ to: "/" });
+  }
+
   async function enterWithEmail() {
     const token = await postEntrar({
       kind: mode === "criar" ? "criar" : "entrar",
@@ -50,13 +63,7 @@ function Login() {
       password,
       name: school.trim() || "Minha academia",
     });
-    keepPreviewSession(token);
-    try {
-      await authClient.getSession();
-    } catch {
-      /* bearer is enough for the next load */
-    }
-    window.location.assign("/");
+    await finishLogin(token);
   }
 
   async function enterDemo() {
@@ -75,13 +82,9 @@ function Login() {
           name: DEMO_SCHOOL,
         });
       }
+      keepSessionToken(token);
       keepPreviewSession(token);
-      try {
-        await authClient.getSession();
-      } catch {
-        /* bearer is enough */
-      }
-      window.location.assign("/");
+      await finishLogin(token);
     } catch (err) {
       setError(loginErrorMessage(err, "entrar"));
     } finally {
@@ -138,6 +141,17 @@ function Login() {
         <div className="order-1 min-h-80 flex-1" />
         <div className="order-2 m-4 w-auto max-w-sm rounded-lg border border-border bg-bg/10 p-5 backdrop-blur-xl md:my-8 md:mr-8 md:ml-0 md:p-6">
         <TatameLogo />
+        {import.meta.env.DEV ? (
+          <div className="mt-3 rounded-sm border border-warning/40 bg-bg/40 px-3 py-2 text-xs text-muted">
+            <p className="font-medium text-fg">Ambiente de teste</p>
+            <p className="mt-1">O site no ar não muda. Use estes logins só aqui.</p>
+            <p className="mt-2">
+              Empresa mãe: <span className="text-fg">contato@smarttatame.com.br</span>
+              <br />
+              Senha: <span className="text-fg">TatameTest-Qr-2026</span>
+            </p>
+          </div>
+        ) : null}
         <p className="mt-2 text-sm text-muted">
           {mode === "restaurar"
             ? resetStep === "email"

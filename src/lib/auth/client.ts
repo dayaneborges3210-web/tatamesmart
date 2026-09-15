@@ -47,8 +47,11 @@ export { GROK_PROVIDERS };
 // preview after a popup sign-in, so the cookie path is untouched elsewhere.
 const BEARER_KEY = "grok-auth.bearer-token";
 
+let memoryBearer: string | null = null;
+
 /** The stored preview bearer token, or null. */
 export function getBearerToken(): string | null {
+  if (memoryBearer) return memoryBearer;
   if (typeof window === "undefined") return null;
   try {
     return window.sessionStorage.getItem(BEARER_KEY) || window.localStorage.getItem(BEARER_KEY);
@@ -57,7 +60,12 @@ export function getBearerToken(): string | null {
   }
 }
 
+export function keepSessionToken(token: string | null): void {
+  setBearerToken(token);
+}
+
 function setBearerToken(token: string | null): void {
+  memoryBearer = token;
   if (typeof window === "undefined") return;
   try {
     if (token) {

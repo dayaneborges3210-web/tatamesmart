@@ -12,10 +12,11 @@ import type {
   DojoSnapshot,
   Invoice,
   Payable,
+  Plan,
   ReminderSend,
   Student,
 } from "@/lib/dojo-types";
-import { clampDegree, isBelt, isModality } from "@/lib/dojo-types";
+import { clampDegree, isBelt, isModality, nextDueFromDay, parseDocs } from "@/lib/dojo-types";
 import { alarmDue, formatAlarm } from "@/lib/alarms";
 import { DEMO_SCHOOL, isDemoEmail } from "@/lib/demo";
 import { ensureMaeAccount } from "@/lib/mae.server";
@@ -27,8 +28,30 @@ function asDate(v: unknown) {
   return String(v);
 }
 
+async function ensureAcademyExtras() {
+  const sql = await getSql();
+  await sql.query(`
+    create table if not exists plans (
+      id text primary key,
+      user_id text not null,
+      name text not null,
+      duration_months int not null default 1,
+      billing text not null default 'mensal',
+      amount int not null default 0,
+      weekly_limit int not null default 0,
+      due_day int not null default 10
+    )
+  `);
+  await sql.query(`alter table students add column if not exists degree integer not null default 0`);
+  await sql.query(`alter table students add column if not exists birth date`);
+  await sql.query(`alter table students add column if not exists plan_id text not null default ''`);
+  await sql.query(`alter table students add column if not exists due_day int not null default 10`);
+  await sql.query(`alter table students add column if not exists docs text not null default ''`);
+}
+
 async function snapshot(userId: string): Promise<DojoSnapshot> {
   const sql = await getSql();
+  await ensureAcademyExtras();
   const me = await sql<{ email: string | null }>`select email from "user" where id = ${userId}`;
   const mail = (me[0]?.email ?? "").trim().toLowerCase();
   const schools = await sql<{
@@ -122,7 +145,11 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
     has_health: boolean | null;
     health_note: string | null;
     degree: number | null;
-  }>`select id, name, phone, modality, belt, class_id, status, joined, cpf, address, cep, has_health, health_note, degree from students where user_id = ${userId} order by name`;
+    birth: unknown;
+    plan_id: string | null;
+    due_day: number | null;
+    docs: string | null;
+  }>`select id, name, phone, modality, belt, class_id, status, joined, cpf, address, cep, has_health, health_note, degree, birth, plan_id, due_day, docs from students where user_id = ${userId} order by name`;
   const invRows = await sql<{
     id: string;
     student_id: string;
@@ -202,6 +229,23 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
     trophies: number;
     modality: string | null;
   }>`select id, name, place, date, time, participants, gold, silver, bronze, trophies, modality from championships where user_id = ${userId} order by date desc`;
+  let planRows: {
+    id: string;
+    name: string;
+    duration_months: number;
+    billing: string;
+    amount: number;
+    weekly_limit: number;
+    due_day: number;
+  }[] = [];
+  try {
+    planRows = await sql`
+      select id, name, duration_months, billing, amount, weekly_limit, due_day
+      from plans where user_id = ${userId} order by name
+    `;
+  } catch {
+    planRows = [];
+  }
 
   const invoices: Invoice[] = invRows.map((row) => {
     const inv: Invoice = {
@@ -255,6 +299,10 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
       cep: s.cep ?? "",
       hasHealth: Boolean(s.has_health),
       healthNote: s.health_note ?? "",
+      birth: s.birth ? asDate(s.birth) : "",
+      planId: s.plan_id ?? "",
+      dueDay: Number(s.due_day) || 10,
+      docs: parseDocs(s.docs),
     })),
     invoices,
     attendance: attRows.map((a) => ({
@@ -336,6 +384,15 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
         trophies: Number(c.trophies) || 0,
       };
     }),
+    plans: planRows.map((p) => ({
+      id: p.id,
+      name: p.name,
+      durationMonths: Number(p.duration_months) || 1,
+      billing: p.billing === "unico" ? "unico" : "mensal",
+      amount: Number(p.amount) || 0,
+      weeklyLimit: Number(p.weekly_limit) || 0,
+      dueDay: Number(p.due_day) || 10,
+    })) as Plan[],
   };
 }
 
@@ -671,6 +728,18 @@ export const loadDojo = createServerFn({ method: "GET" })
 
 async function dispatchToday(userId: string) {
   const sql = await getSql();
+  await sql.query(`
+    create table if not exists wa_dispatch_claims (
+      user_id text not null,
+      kind text not null,
+      item_id text not null,
+      dispatch_day text not null,
+      status text not null default 'attempting',
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      primary key (user_id, kind, item_id, dispatch_day)
+    )
+  `);
   const creds = await ensureSchoolWa(userId);
   const { token, url, instance: phoneId } = creds;
   const snap = await snapshot(userId);
@@ -856,24 +925,85 @@ export const addStudentFn = createServerFn({ method: "POST" })
       cep: string;
       hasHealth: boolean;
       healthNote: string;
+      birth?: string;
+      planId?: string;
+      dueDay?: number;
+      docs?: string[];
+      trial?: boolean;
     }) => d,
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    await ensureAcademyExtras();
     const id = `${context.userId}:s${Date.now()}`;
     const t = todayISO();
-    const due = addDaysISO(t, 10);
-    const amount = data.modality === "Kids" ? 12990 : 17990;
+    const plans = await sql<{ id: string; amount: number; due_day: number }>`
+      select id, amount, due_day from plans where user_id = ${context.userId} and id = ${data.planId ?? ""}
+    `;
+    const plan = plans[0];
+    const dueDay = Math.min(28, Math.max(1, data.dueDay || plan?.due_day || 10));
+    const due = nextDueFromDay(dueDay, t);
+    const amount = plan ? Number(plan.amount) : data.modality === "Kids" ? 12990 : 17990;
     const cpf = data.cpf.replace(/[^\d.\-]/g, "").slice(0, 14);
     const cep = data.cep.replace(/[^\d\-]/g, "").slice(0, 9);
     const address = data.address.trim().slice(0, 200);
     const hasHealth = Boolean(data.hasHealth);
     const healthNote = hasHealth ? data.healthNote.trim().slice(0, 300) : "";
     const degree = clampDegree(data.belt, data.degree ?? 0);
-    await sql`insert into students (id, user_id, name, phone, modality, belt, degree, class_id, status, joined, cpf, address, cep, has_health, health_note)
-      values (${id}, ${context.userId}, ${data.name}, ${data.phone}, ${data.modality}, ${data.belt}, ${degree}, ${data.classId}, ${"ativo"}, ${t}, ${cpf}, ${address}, ${cep}, ${hasHealth}, ${healthNote})`;
+    const birth = /^\d{4}-\d{2}-\d{2}$/.test(data.birth ?? "") ? data.birth : null;
+    const docs = parseDocs((data.docs ?? []).join(",")).join(",");
+    const status = data.trial ? "trial" : "ativo";
+    const planId = plan?.id ?? "";
+    await sql`insert into students (id, user_id, name, phone, modality, belt, degree, class_id, status, joined, cpf, address, cep, has_health, health_note, birth, plan_id, due_day, docs)
+      values (${id}, ${context.userId}, ${data.name}, ${data.phone}, ${data.modality}, ${data.belt}, ${degree}, ${data.classId}, ${status}, ${t}, ${cpf}, ${address}, ${cep}, ${hasHealth}, ${healthNote}, ${birth}, ${planId}, ${dueDay}, ${docs})`;
     await sql`insert into invoices (id, user_id, student_id, month, amount, status, due)
       values (${`inv-${id}`}, ${context.userId}, ${id}, ${due.slice(0, 7)}, ${amount}, ${"aberta"}, ${due})`;
+    return snapshot(context.userId);
+  });
+
+export const saveStudentFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string; docs?: string[]; planId?: string; dueDay?: number; status?: Student["status"] }) => d)
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await ensureAcademyExtras();
+    const rows = await sql<{ id: string }>`select id from students where id = ${data.id} and user_id = ${context.userId}`;
+    if (!rows.length) throw new Error("Aluno não encontrado.");
+    if (data.docs) {
+      const docs = parseDocs(data.docs.join(",")).join(",");
+      await sql`update students set docs = ${docs} where id = ${data.id} and user_id = ${context.userId}`;
+    }
+    if (data.planId !== undefined) {
+      await sql`update students set plan_id = ${data.planId} where id = ${data.id} and user_id = ${context.userId}`;
+    }
+    if (data.dueDay !== undefined) {
+      const dueDay = Math.min(28, Math.max(1, data.dueDay));
+      await sql`update students set due_day = ${dueDay} where id = ${data.id} and user_id = ${context.userId}`;
+    }
+    if (data.status) {
+      await sql`update students set status = ${data.status} where id = ${data.id} and user_id = ${context.userId}`;
+    }
+    return snapshot(context.userId);
+  });
+
+export const addPlanFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(
+    (d: { name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number }) => d,
+  )
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await ensureAcademyExtras();
+    const id = `${context.userId}:p${Date.now()}`;
+    const name = data.name.trim().slice(0, 80);
+    if (!name) throw new Error("Dê um nome ao plano.");
+    const duration = [1, 3, 6, 12].includes(data.durationMonths) ? data.durationMonths : 1;
+    const amount = Math.max(0, Math.round(data.amount));
+    const weekly = Math.max(0, Math.round(data.weeklyLimit));
+    const dueDay = Math.min(28, Math.max(1, Math.round(data.dueDay) || 10));
+    const billing = data.billing === "unico" ? "unico" : "mensal";
+    await sql`insert into plans (id, user_id, name, duration_months, billing, amount, weekly_limit, due_day)
+      values (${id}, ${context.userId}, ${name}, ${duration}, ${billing}, ${amount}, ${weekly}, ${dueDay})`;
     return snapshot(context.userId);
   });
 

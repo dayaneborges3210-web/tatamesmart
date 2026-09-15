@@ -7,6 +7,8 @@ import {
   addStaffFn,
   addStockFn,
   addStudentFn,
+  addPlanFn,
+  saveStudentFn,
   adjustStockFn,
   deleteStockFn,
   dispatchTodayFn,
@@ -58,11 +60,14 @@ const EMPTY: DojoSnapshot = {
   stock: [],
   sales: [],
   championships: [],
+  plans: [],
 };
 
 type Store = DojoSnapshot & {
   loading: boolean;
-  addStudent: (s: Omit<Student, "id" | "joined" | "status">) => Promise<void>;
+  addStudent: (s: Omit<Student, "id" | "joined">) => Promise<void>;
+  saveStudent: (d: { id: string; docs?: string[]; planId?: string; dueDay?: number; status?: Student["status"] }) => Promise<void>;
+  addPlan: (d: { name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number }) => Promise<void>;
   toggleAttendance: (studentId: string, classId: string, date: string, present: boolean) => Promise<void>;
   markPaid: (invoiceId: string) => Promise<void>;
   markReminderSent: (invoiceId: string, phase: ReminderSend["phase"]) => Promise<void>;
@@ -152,6 +157,7 @@ function asSnap(next: unknown): DojoSnapshot | null {
     stock: n.stock ?? [],
     sales: n.sales ?? [],
     championships: n.championships ?? [],
+    plans: n.plans ?? [],
   };
 }
 
@@ -221,14 +227,26 @@ export function DojoProvider({ children }: { children: ReactNode }) {
             classId: input.classId,
             modality: input.modality as Modality,
             belt: input.belt,
+            degree: input.degree,
             cpf: input.cpf,
             address: input.address,
             cep: input.cep,
             hasHealth: input.hasHealth,
             healthNote: input.healthNote,
+            birth: input.birth,
+            planId: input.planId,
+            dueDay: input.dueDay,
+            docs: input.docs,
+            trial: input.status === "trial",
           },
         }),
       );
+    },
+    saveStudent: async (d) => {
+      apply(await saveStudentFn({ data: d }));
+    },
+    addPlan: async (d) => {
+      apply(await addPlanFn({ data: d }));
     },
     toggleAttendance: async (studentId, classId, date, present) => {
       apply(await toggleAttendanceFn({ data: { studentId, classId, date, present } }));

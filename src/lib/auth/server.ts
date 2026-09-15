@@ -64,6 +64,10 @@ function previewAuthSecret(): string {
   globalAuthRef.__grokAuthPreviewSecret__ ??= randomBytes(32).toString("hex");
   return globalAuthRef.__grokAuthPreviewSecret__;
 }
+export function authCookieSecret() {
+  return env("BETTER_AUTH_SECRET") ?? previewAuthSecret();
+}
+
 
 /** Read an env var, treating empty/whitespace as unset. */
 const env = (key: string): string | undefined => {
@@ -181,7 +185,7 @@ export const auth = betterAuth({
   baseURL,
   // Deployed apps inject BETTER_AUTH_SECRET. Preview: process-stable secret on
   // globalThis so HMR doesn't invalidate PGLite-backed sessions (see above).
-  secret: env("BETTER_AUTH_SECRET") ?? previewAuthSecret(),
+  secret: authCookieSecret(),
   database,
 
   // CSRF / origin check for credentialed auth POSTs (email sign-up/sign-in, …).

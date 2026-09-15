@@ -21,6 +21,7 @@ import { Route as FrequenciaRouteImport } from './routes/frequencia'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LojaRouteImport } from './routes/loja'
 import { Route as MensalidadesRouteImport } from './routes/mensalidades'
+import { Route as PlanosRouteImport } from './routes/planos'
 import { Route as ProfessoresRouteImport } from './routes/professores'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as TurmasRouteImport } from './routes/turmas'
@@ -91,6 +92,11 @@ const MensalidadesRoute = MensalidadesRouteImport.update({
   path: '/mensalidades',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlanosRoute = PlanosRouteImport.update({
+  id: '/planos',
+  path: '/planos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfessoresRoute = ProfessoresRouteImport.update({
   id: '/professores',
   path: '/professores',
@@ -150,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/loja': typeof LojaRoute
   '/mensalidades': typeof MensalidadesRoute
+  '/planos': typeof PlanosRoute
   '/professores': typeof ProfessoresRoute
   '/relatorios': typeof RelatoriosRoute
   '/turmas': typeof TurmasRoute
@@ -173,6 +180,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/loja': typeof LojaRoute
   '/mensalidades': typeof MensalidadesRoute
+  '/planos': typeof PlanosRoute
   '/professores': typeof ProfessoresRoute
   '/relatorios': typeof RelatoriosRoute
   '/turmas': typeof TurmasRoute
@@ -197,6 +205,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/loja': typeof LojaRoute
   '/mensalidades': typeof MensalidadesRoute
+  '/planos': typeof PlanosRoute
   '/professores': typeof ProfessoresRoute
   '/relatorios': typeof RelatoriosRoute
   '/turmas': typeof TurmasRoute
@@ -222,6 +231,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/loja'
     | '/mensalidades'
+    | '/planos'
     | '/professores'
     | '/relatorios'
     | '/turmas'
@@ -245,6 +255,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/loja'
     | '/mensalidades'
+    | '/planos'
     | '/professores'
     | '/relatorios'
     | '/turmas'
@@ -268,6 +279,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/loja'
     | '/mensalidades'
+    | '/planos'
     | '/professores'
     | '/relatorios'
     | '/turmas'
@@ -292,6 +304,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   LojaRoute: typeof LojaRoute
   MensalidadesRoute: typeof MensalidadesRoute
+  PlanosRoute: typeof PlanosRoute
   ProfessoresRoute: typeof ProfessoresRoute
   RelatoriosRoute: typeof RelatoriosRoute
   TurmasRoute: typeof TurmasRoute
@@ -389,6 +402,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MensalidadesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/planos': {
+      id: '/planos'
+      path: '/planos'
+      fullPath: '/planos'
+      preLoaderRoute: typeof PlanosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/professores': {
       id: '/professores'
       path: '/professores'
@@ -468,6 +488,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   LojaRoute: LojaRoute,
   MensalidadesRoute: MensalidadesRoute,
+  PlanosRoute: PlanosRoute,
   ProfessoresRoute: ProfessoresRoute,
   RelatoriosRoute: RelatoriosRoute,
   TurmasRoute: TurmasRoute,

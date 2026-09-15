@@ -277,8 +277,7 @@ function ConfigBody() {
       <section id="whatsapp" className="mt-10 max-w-xl scroll-mt-8">
         <h2 className="text-sm font-medium">WhatsApp da academia</h2>
         <p className="mt-1 text-sm text-muted">
-          Abra o WhatsApp no celular do dono → Aparelhos conectados → Ler QR. Pronto. As mensalidades saem deste
-          número.
+          Cada academia lê o próprio QR no celular do dono. As mensalidades saem deste número, não do Metalcore.
         </p>
         {showApiForm ? (
           <form
@@ -287,14 +286,14 @@ function ConfigBody() {
               e.preventDefault();
               setApiInfo("");
               setBusy(true);
-              void persist({ waUrl: apiUrl || "http://129.121.55.118", waPhoneId: apiId, waToken: apiToken, waAuto: true })
+              void persist({ waUrl: apiUrl || "https://whatsapp.metalcoreerp.com.br", waToken: apiToken, waAuto: true })
                 .then(() => { setApiToken(""); setApiInfo("API salva. Atualize o QR para conectar."); })
                 .catch((err: unknown) => setApiInfo(err instanceof Error ? err.message : "Não foi possível salvar a API."))
                 .finally(() => setBusy(false));
             }}
           >
             <Field label="URL da Evolution (só a empresa mãe)">
-              <Input value={apiUrl} onChange={(e) => setApiUrl(e.target.value)} placeholder="http://129.121.55.118" />
+              <Input value={apiUrl} onChange={(e) => setApiUrl(e.target.value)} placeholder="https://whatsapp.metalcoreerp.com.br" />
             </Field>
             <Field label="Token global (só a empresa mãe)">
               <PasswordInput
@@ -304,18 +303,21 @@ function ConfigBody() {
                 autoComplete="off"
               />
             </Field>
+            <p className="text-xs text-muted">
+              Cole URL e token global. A instância de cada academia (e o QR) nasce sozinha — não use METALCORE.
+            </p>
             <Button type="submit" disabled={busy || loading}>
               Salvar API
             </Button>
           </form>
         ) : null}
         {!waReady && !waOwner ? (
-          <p className="mt-4 text-sm text-muted">O QR aparece assim que a TatameSmart ligar o serviço.</p>
+          <p className="mt-4 text-sm text-muted">O QR da sua academia aparece assim que a empresa mãe ligar a API.</p>
         ) : null}
         {waReady ? (
           <div className="mt-4 rounded-lg border border-border bg-surface p-5">
             <p className="text-sm font-medium">
-              {waLink === "open" ? "Conectado" : busy ? "Gerando QR…" : "Leia o QR com o celular da academia"}
+              {waLink === "open" ? "Conectado" : busy ? "Gerando QR…" : "Leia o QR com o celular desta academia"}
             </p>
             {apiInfo ? (
               <p className={`mt-2 text-sm ${/conectado|salva|enviada|gerado/i.test(apiInfo) ? "text-success" : "text-danger"}`}>
@@ -336,7 +338,7 @@ function ConfigBody() {
                   setApiInfo("");
                   setBusy(true);
                   const override = apiToken.trim()
-                    ? { url: apiUrl || "http://129.121.55.118", token: apiToken.trim() }
+                    ? { url: apiUrl || "https://whatsapp.metalcoreerp.com.br", token: apiToken.trim() }
                     : undefined;
                   void waQrClient(override)
                     .then((r) => {
@@ -359,7 +361,7 @@ function ConfigBody() {
                   setBusy(true);
                   void (apiToken.trim()
                     ? waTestClient({
-                        url: apiUrl || "http://129.121.55.118",
+                        url: apiUrl || "https://whatsapp.metalcoreerp.com.br",
                         token: apiToken.trim(),
                         to: phone,
                       })

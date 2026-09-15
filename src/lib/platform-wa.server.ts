@@ -40,12 +40,14 @@ export async function ensurePlatformWa(): Promise<PlatformWa> {
   let instance = (rows[0]?.wa_instance ?? "").trim();
   let token = (rows[0]?.wa_token ?? "").trim();
   let ownerUserId = (rows[0]?.owner_user_id ?? "").trim();
-  if (!url) url = "http://129.121.55.118";
+  if (!url) url = "https://whatsapp.metalcoreerp.com.br";
+  if (/^metalcore$/i.test(instance) || /^autocore$/i.test(instance)) instance = "";
 
   if (!token) {
     const env = fromEnv();
     url = url || normalizeEvolutionUrl(env.url ?? "");
     instance = instance || (env.instance ?? "");
+    if (/^metalcore$/i.test(instance) || /^autocore$/i.test(instance)) instance = "";
     token = env.token ?? "";
   }
 
@@ -58,11 +60,12 @@ export async function ensurePlatformWa(): Promise<PlatformWa> {
     }>`select s.wa_url, s.wa_phone_id, s.wa_token, s.user_id from schools s
        join "user" u on u.id = s.user_id
        where lower(u.email) = ${PLATFORM_OWNER_EMAIL}
-       and coalesce(s.wa_token, '') <> '' and coalesce(s.wa_phone_id, '') <> '' and coalesce(s.wa_url, '') <> ''
+       and coalesce(s.wa_token, '') <> '' and coalesce(s.wa_url, '') <> ''
        limit 1`;
     if (school[0]) {
       url = (school[0].wa_url ?? "").trim();
       instance = (school[0].wa_phone_id ?? "").trim();
+      if (/^metalcore$/i.test(instance) || /^autocore$/i.test(instance)) instance = "";
       token = (school[0].wa_token ?? "").trim();
       ownerUserId = ownerUserId || school[0].user_id;
     }
@@ -83,7 +86,8 @@ export async function savePlatformWa(userId: string, next: { url?: string; insta
     throw new Error("A API do WhatsApp já é da TatameSmart. O cliente não altera.");
   }
   const url = normalizeEvolutionUrl(next.url ?? current.url).slice(0, 200);
-  const instance = (next.instance ?? current.instance).trim().slice(0, 80);
+  let instance = (next.instance ?? current.instance).trim().slice(0, 80);
+  if (/^metalcore$/i.test(instance) || /^autocore$/i.test(instance)) instance = "";
   const token = (next.token ?? "").trim();
   const keep = token && !token.startsWith("•") ? token.slice(0, 400) : current.token;
   await sql`update platform_settings
@@ -102,6 +106,15 @@ export async function ensureSchoolWa(userId: string) {
     throw new Error("A TatameSmart ainda não ligou a API do WhatsApp.");
   }
   const sql = await getSql();
+  await sql.query(`
+    create table if not exists wa_school_instances (
+      user_id text primary key,
+      instance_name text not null unique,
+      instance_token text not null,
+      provisioned boolean not null default false,
+      created_at timestamptz not null default now()
+    )
+  `);
   const schools = await sql<{ user_id: string }>`select user_id from schools where user_id = ${userId}`;
   if (!schools.length) throw new Error("Academia não encontrada.");
   await sql`insert into wa_school_instances (user_id, instance_name, instance_token)
@@ -111,13 +124,24 @@ export async function ensureSchoolWa(userId: string) {
     select instance_name, instance_token, provisioned from wa_school_instances where user_id = ${userId}`;
   const row = rows[0];
   if (!row || row.instance_token === platform.token) throw new Error("Credencial individual indisponível.");
+  if (/^metalcore$/i.test(row.instance_name) || /^autocore$/i.test(row.instance_name)) {
+    throw new Error("Instância inválida. Cada academia usa o próprio QR.");
+  }
   const creds = { url: platform.url, instance: row.instance_name, token: row.instance_token };
   if (!row.provisioned) {
-    try { await createEvolutionInstance({ url: platform.url, token: platform.token, instance: creds.instance, instanceToken: creds.token }); }
-    catch (error) {
-      // A concurrent request may have created it. Only accept that if our
-      // individual credential can actually access this exact instance.
-      try { await evolutionState(creds); } catch { throw error; }
+    try {
+      await createEvolutionInstance({
+        url: platform.url,
+        token: platform.token,
+        instance: creds.instance,
+        instanceToken: creds.token,
+      });
+    } catch (error) {
+      try {
+        await evolutionState(creds);
+      } catch {
+        throw error;
+      }
     }
     await evolutionState(creds);
     await sql`update wa_school_instances set provisioned = true where user_id = ${userId}`;

@@ -17,10 +17,14 @@ export async function ensureMaeAccount() {
   `;
   let userId = found[0]?.id ?? "";
   if (!userId) {
-    const initialPassword = process.env.TATAMESMART_OWNER_INITIAL_PASSWORD || "";
-    if (initialPassword.length < 16) return "";
+    const initialPassword = (process.env.TATAMESMART_OWNER_INITIAL_PASSWORD || "").trim();
+    // Preview only (no Neon): a known test password so the mother account can
+    // log in without writing a secret into production.
+    const previewPassword = process.env.DATABASE_URL ? "" : "TatameTest-Qr-2026";
+    const password = initialPassword.length >= 16 ? initialPassword : previewPassword;
+    if (password.length < 16) return "";
     userId = newId();
-    const hashed = await hashPassword(initialPassword);
+    const hashed = await hashPassword(password);
     await sql`
       insert into "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
       values (${userId}, ${MAE_NAME}, ${email}, true, now(), now())
