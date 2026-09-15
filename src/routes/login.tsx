@@ -28,7 +28,7 @@ async function postEntrar(payload: {
 }
 
 function Login() {
-  const { user } = useCurrentUserState();
+  const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
   const [mode, setMode] = useState<"entrar" | "criar" | "restaurar">("entrar");
   const [school, setSchool] = useState("");
@@ -42,16 +42,21 @@ function Login() {
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
 
+  if (isPending) return <main className="min-h-dvh bg-bg" />;
   if (user) return <Navigate to="/" />;
 
   async function finishLogin(token: string) {
     keepSessionToken(token);
     keepPreviewSession(token);
-    try {
-      await authClient.getSession();
-      authClient.$store.notify("$sessionSignal");
-    } catch {
-      /* bearer is enough for the next screen */
+    for (let i = 0; i < 8; i += 1) {
+      try {
+        const session = await authClient.getSession();
+        authClient.$store.notify("$sessionSignal");
+        if (session.data?.user) break;
+      } catch {
+        /* next try */
+      }
+      await new Promise((r) => window.setTimeout(r, 180));
     }
     await navigate({ to: "/" });
   }

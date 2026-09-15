@@ -34,7 +34,7 @@ function Home() {
       } catch {
         /* older client */
       }
-      if (n >= 10) setHold(false);
+      if (n >= 16) setHold(false);
     };
     tick();
     const t = window.setInterval(tick, 250);
