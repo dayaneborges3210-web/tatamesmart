@@ -1,5 +1,5 @@
-import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { useEffect, useState, type FormEvent } from "react";
 import { GROK_PROVIDERS, authClient, authEnabled, keepSessionToken, signIn } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button, Field, Input, PasswordInput } from "@/components/ui";
@@ -29,7 +29,7 @@ async function postEntrar(payload: {
 
 function Login() {
   const { user, isPending } = useCurrentUserState();
-  const navigate = useNavigate();
+  const [ready, setReady] = useState(false);
   const [mode, setMode] = useState<"entrar" | "criar" | "restaurar">("entrar");
   const [school, setSchool] = useState("");
   const [email, setEmail] = useState(import.meta.env.DEV ? "contato@smarttatame.com.br" : "");
@@ -42,23 +42,26 @@ function Login() {
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (isPending) return <main className="min-h-dvh bg-bg" />;
+  useEffect(() => {
+    const t = window.setTimeout(() => setReady(true), 800);
+    return () => window.clearTimeout(t);
+  }, []);
+
   if (user) return <Navigate to="/" />;
+  if (isPending && !ready) return <main className="min-h-dvh bg-bg" />;
 
   async function finishLogin(token: string) {
     keepSessionToken(token);
     keepPreviewSession(token);
-    for (let i = 0; i < 8; i += 1) {
-      try {
-        const session = await authClient.getSession();
-        authClient.$store.notify("$sessionSignal");
-        if (session.data?.user) break;
-      } catch {
-        /* next try */
-      }
-      await new Promise((r) => window.setTimeout(r, 180));
+    try {
+      await authClient.getSession({
+        fetchOptions: { headers: { Authorization: `Bearer ${token}` } },
+      });
+      authClient.$store.notify("$sessionSignal");
+    } catch {
+      /* hard reload below */
     }
-    await navigate({ to: "/" });
+    window.location.assign("/");
   }
 
   async function enterWithEmail() {
@@ -87,12 +90,9 @@ function Login() {
           name: DEMO_SCHOOL,
         });
       }
-      keepSessionToken(token);
-      keepPreviewSession(token);
       await finishLogin(token);
     } catch (err) {
       setError(loginErrorMessage(err, "entrar"));
-    } finally {
       setBusy(false);
     }
   }
@@ -326,3 +326,4 @@ function Login() {
     </main>
   );
 }
+

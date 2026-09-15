@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { serializeSignedCookie } from "better-call";
 import { emailAuthCore } from "@/lib/school-auth";
-import { SESSION_TOKEN_COOKIE } from "@/lib/auth/server";
+import { authCookieSecret, SESSION_TOKEN_COOKIE } from "@/lib/auth/server";
 import { SITE_DOMAIN } from "@/lib/site";
 
 function originOk(request: Request) {
@@ -30,20 +31,34 @@ function originOk(request: Request) {
   }
 }
 
-function cookieHeaders(token: string, request: Request) {
+async function cookieHeaders(token: string, request: Request) {
   const dest = (request.headers.get("sec-fetch-dest") || "").toLowerCase();
   const framed = dest === "iframe" || dest === "embed";
   const secure =
     request.url.startsWith("https://") || request.headers.get("x-forwarded-proto") === "https";
+  const secret = authCookieSecret();
   const out: string[] = [];
-  if (secure && framed) {
+  if (secure) {
     out.push(
-      `${SESSION_TOKEN_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=2592000`,
+      await serializeSignedCookie(SESSION_TOKEN_COOKIE, token, secret, {
+        path: "/",
+        httpOnly: true,
+        secure: true,
+        sameSite: framed ? "none" : "lax",
+        maxAge: 2592000,
+        partitioned: framed,
+      }),
     );
-  } else if (secure) {
-    out.push(`${SESSION_TOKEN_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
   }
-  out.push(`grok-auth.session_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secure ? "; Secure" : ""}`);
+  out.push(
+    await serializeSignedCookie("grok-auth.session_token", token, secret, {
+      path: "/",
+      httpOnly: true,
+      secure,
+      sameSite: "lax",
+      maxAge: 2592000,
+    }),
+  );
   return out;
 }
 
@@ -52,7 +67,10 @@ export const Route = createFileRoute("/api/entrar")({
     handlers: {
       POST: async ({ request }) => {
         if (!originOk(request)) {
-          return Response.json({ message: "Origem inválida. Abra smarttatame.com.br e entre de novo." }, { status: 403 });
+          return Response.json(
+            { message: "Origem inválida. Abra smarttatame.com.br e entre de novo." },
+            { status: 403 },
+          );
         }
         let body: { kind?: string; email?: string; password?: string; name?: string };
         try {
@@ -69,7 +87,7 @@ export const Route = createFileRoute("/api/entrar")({
             name: body.name,
           });
           const headers = new Headers({ "content-type": "application/json" });
-          for (const c of cookieHeaders(result.token, request)) headers.append("set-cookie", c);
+          for (const c of await cookieHeaders(result.token, request)) headers.append("set-cookie", c);
           return new Response(JSON.stringify(result), { status: 200, headers });
         } catch (err) {
           const message = err instanceof Error ? err.message : "Não foi possível entrar.";
