@@ -51,7 +51,7 @@ async function addressFromCep(cep: string) {
 }
 
 function AlunosBody() {
-  const { students, classes, plans, addStudent, saveStudent, deleteStudent } = useDojo();
+  const { students, classes, plans, branches, branchId, addStudent, saveStudent, deleteStudent } = useDojo();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -72,6 +72,7 @@ function AlunosBody() {
   const [dueDay, setDueDay] = useState(10);
   const [trial, setTrial] = useState(false);
   const [docs, setDocs] = useState<string[]>([]);
+  const [unitId, setUnitId] = useState("");
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -105,6 +106,7 @@ function AlunosBody() {
     setDueDay(10);
     setTrial(false);
     setDocs([]);
+    setUnitId(branchId);
     setEditingId(null);
     setOpen(false);
   }
@@ -127,6 +129,7 @@ function AlunosBody() {
     setDueDay(s.dueDay || 10);
     setTrial(s.status === "trial");
     setDocs([...s.docs]);
+    setUnitId(s.branchId || branchId);
     setFicha(null);
     setOpen(true);
   }
@@ -164,7 +167,13 @@ function AlunosBody() {
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Alunos</h1>
           <p className="mt-1 text-sm text-muted">Matrícula com plano, turma, faixa, documentos e ficha de saúde.</p>
         </div>
-        <Button type="button" onClick={() => setOpen(true)}>
+        <Button
+          type="button"
+          onClick={() => {
+            setUnitId(branchId || branches.find((b) => b.kind === "matriz")?.id || branches[0]?.id || "");
+            setOpen(true);
+          }}
+        >
           Novo aluno
         </Button>
       </div>
@@ -265,6 +274,7 @@ function AlunosBody() {
                 dueDay,
                 docs,
                 status: (trial ? "trial" : "ativo") as Student["status"],
+                branchId: unitId,
               };
               const run = editingId
                 ? saveStudent({ id: editingId, ...payload })
@@ -306,6 +316,19 @@ function AlunosBody() {
                   placeholder="Rua, número, bairro, cidade"
                   required
                 />
+              </Field>
+              <Field label="Unidade">
+                <select
+                  className="min-h-11 w-full rounded-sm border border-border bg-bg px-3 text-sm text-fg"
+                  value={unitId}
+                  onChange={(e) => setUnitId(e.target.value)}
+                >
+                  {branches.filter((b) => b.active).map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.kind === "matriz" ? `Matriz · ${b.name}` : b.name}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="Turma">
                 <select

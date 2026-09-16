@@ -11,6 +11,8 @@ import { invoiceStatus, phaseFor } from "@/lib/cobranca";
 import { DojoProvider, useDojo } from "@/lib/dojo-store";
 import { TatameLogo } from "@/components/logo";
 import { daysUntil, todayISO } from "@/lib/money";
+import type { Branch } from "@/lib/dojo-types";
+import { activeBranches } from "@/lib/branch-scope";
 
 const NAV = [
   { to: "/", label: "Painel", icon: LayoutGrid },
@@ -44,7 +46,7 @@ export function Shell({ children }: { children: ReactNode }) {
 function ShellInner({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const user = useCurrentUser();
-  const { school, logo, invoices, reminders, payables, agenda, stock, loading, blocked, waOwner } = useDojo();
+  const { school, logo, invoices, reminders, payables, agenda, stock, loading, blocked, waOwner, branches, branchId, setBranch } = useDojo();
   const [leaving, setLeaving] = useState(false);
   const today = todayISO();
   const queueCount = invoices.filter((inv) => {
@@ -115,13 +117,16 @@ function ShellInner({ children }: { children: ReactNode }) {
           {logo ? (
             <>
               <BrandMark school={school} logo={logo} />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold tracking-tight">{loading ? "…" : school || "TatameSmart"}</p>
-                <p className="text-xs text-muted">TatameSmart</p>
+                <BranchSwitch branches={branches} branchId={branchId} onChange={setBranch} />
               </div>
             </>
           ) : (
-            <TatameLogo compact title={loading ? "…" : school || "TATAMESMART"} />
+            <div className="min-w-0 flex-1">
+              <TatameLogo compact title={loading ? "…" : school || "TATAMESMART"} />
+              <BranchSwitch branches={branches} branchId={branchId} onChange={setBranch} />
+            </div>
           )}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">{nav}</div>
@@ -160,6 +165,34 @@ function BrandMark({ school, logo }: { school: string; logo: string }) {
     <span className="grid size-8 shrink-0 place-items-center rounded-sm bg-accent text-xs font-semibold text-accent-fg">
       {letter}
     </span>
+  );
+}
+
+function BranchSwitch({
+  branches,
+  branchId,
+  onChange,
+}: {
+  branches: Branch[];
+  branchId: string;
+  onChange: (id: string) => void;
+}) {
+  const live = activeBranches(branches);
+  if (!live.length) return <p className="text-xs text-muted">TatameSmart</p>;
+  return (
+    <select
+      className="mt-1 w-full truncate rounded-sm border-0 bg-transparent p-0 text-xs text-muted outline-none"
+      value={branchId}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label="Unidade"
+    >
+      {live.length > 1 ? <option value="">Todas as unidades</option> : null}
+      {live.map((b) => (
+        <option key={b.id} value={b.id}>
+          {b.kind === "matriz" ? `Matriz · ${b.name}` : b.name}
+        </option>
+      ))}
+    </select>
   );
 }
 

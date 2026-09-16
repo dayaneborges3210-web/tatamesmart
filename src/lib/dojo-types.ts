@@ -69,6 +69,7 @@ export type Student = {
   planId: string;
   dueDay: number;
   docs: string[];
+  branchId: string;
 };
 
 export type Plan = {
@@ -128,6 +129,7 @@ export type ClassGroup = {
   timeEnd: string;
   instructor: string;
   capacity: number;
+  branchId: string;
 };
 
 export type Invoice = {
@@ -162,6 +164,7 @@ export type Payable = {
   amount: number;
   due: string;
   status: "aberta" | "paga" | "atrasada";
+  branchId: string;
 };
 
 export type AgendaItem = {
@@ -172,6 +175,7 @@ export type AgendaItem = {
   done: boolean;
   alarmAt: string;
   alarmSent: boolean;
+  branchId: string;
 };
 
 export type Staff = {
@@ -180,6 +184,7 @@ export type Staff = {
   role: string;
   phone: string;
   pay: number;
+  branchId: string;
 };
 
 export type StockItem = {
@@ -190,6 +195,7 @@ export type StockItem = {
   minQty: number;
   unitCost: number;
   price: number;
+  branchId: string;
 };
 
 export type Sale = {
@@ -202,6 +208,7 @@ export type Sale = {
   total: number;
   payMethod: string;
   soldOn: string;
+  branchId: string;
 };
 
 export type Championship = {
@@ -216,6 +223,16 @@ export type Championship = {
   silver: number;
   bronze: number;
   trophies: number;
+  branchId: string;
+};
+
+export type Branch = {
+  id: string;
+  name: string;
+  kind: "matriz" | "filial";
+  address: string;
+  phone: string;
+  active: boolean;
 };
 
 export type ChargeTexts = {
@@ -240,6 +257,7 @@ export type DojoSnapshot = {
   waUrl: string;
   waOwner: boolean;
   blocked: boolean;
+  branches: Branch[];
   students: Student[];
   classes: ClassGroup[];
   invoices: Invoice[];

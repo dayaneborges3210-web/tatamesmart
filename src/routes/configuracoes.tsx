@@ -41,7 +41,7 @@ function ConfigBody() {
     loading,
   } = useDojo();
   const user = useCurrentUser();
-  const [tab, setTab] = useState<"academia" | "seguranca">("academia");
+  const [tab, setTab] = useState<"academia" | "seguranca" | "filiais">("academia");
   const [name, setName] = useState(school);
   const [mark, setMark] = useState(logo);
   const [phone, setPhone] = useState(ownerPhone);
@@ -152,11 +152,23 @@ function ConfigBody() {
         >
           Segurança e login
         </button>
+        <button
+          type="button"
+          className={cn(
+            "min-h-11 rounded-md border px-4 text-sm",
+            tab === "filiais" ? "border-fg bg-surface text-fg" : "border-border text-muted hover:text-fg",
+          )}
+          onClick={() => setTab("filiais")}
+        >
+          Filiais
+        </button>
       </div>
 
       {tab === "seguranca" ? (
         <SecurityTab email={user?.primaryEmail || ""} />
       ) : null}
+
+      {tab === "filiais" ? <BranchesTab /> : null}
 
       {tab === "academia" ? (
         <>
@@ -530,6 +542,138 @@ function SecurityTab({ email }: { email: string }) {
         {info ? <p className="text-sm text-success">{info}</p> : null}
         <Button type="submit" disabled={busy || !current || !next || !confirm}>
           {busy ? "Salvando…" : "Salvar senha nova"}
+        </Button>
+      </form>
+    </section>
+  );
+}
+
+function BranchesTab() {
+  const { branches, addBranch, saveBranch } = useDojo();
+  const [name, setName] = useState("");
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState("");
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+
+  return (
+    <section className="mt-8 max-w-xl">
+      <h2 className="text-sm font-medium">Filiais</h2>
+      <p className="mt-1 text-sm text-muted">
+        A matriz nasce com a academia. Cada filial tem alunos, turmas, estoque e caixa próprios. Planos e frases de cobrança são da rede.
+      </p>
+      <div className="mt-4 grid gap-3">
+        {branches.map((b) => (
+          <div key={b.id} className="rounded-lg border border-border bg-surface p-4">
+            {editId === b.id ? (
+              <form
+                className="grid gap-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setBusy(true);
+                  void saveBranch({ id: b.id, name: editName, address: editAddress, phone: editPhone, active: b.active })
+                    .then(() => {
+                      setEditId(null);
+                      setInfo("Unidade atualizada.");
+                    })
+                    .finally(() => setBusy(false));
+                }}
+              >
+                <Field label="Nome">
+                  <Input value={editName} onChange={(e) => setEditName(e.target.value)} required />
+                </Field>
+                <Field label="Endereço">
+                  <Input value={editAddress} onChange={(e) => setEditAddress(e.target.value)} />
+                </Field>
+                <Field label="Telefone">
+                  <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
+                </Field>
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={busy}>
+                    Salvar
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => setEditId(null)}>
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <p className="text-sm font-medium">
+                  {b.name}{" "}
+                  <span className="text-xs font-normal text-muted">{b.kind === "matriz" ? "Matriz" : "Filial"}</span>
+                  {!b.active ? <span className="ml-2 text-xs text-danger">inativa</span> : null}
+                </p>
+                {b.address ? <p className="mt-1 text-sm text-muted">{b.address}</p> : null}
+                {b.phone ? <p className="text-sm text-muted">{b.phone}</p> : null}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditId(b.id);
+                      setEditName(b.name);
+                      setEditAddress(b.address);
+                      setEditPhone(b.phone);
+                    }}
+                  >
+                    Editar
+                  </Button>
+                  {b.kind !== "matriz" ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => {
+                        setBusy(true);
+                        void saveBranch({ id: b.id, name: b.name, address: b.address, phone: b.phone, active: !b.active })
+                          .then(() => setInfo(b.active ? "Filial desativada." : "Filial reativada."))
+                          .finally(() => setBusy(false));
+                      }}
+                    >
+                      {b.active ? "Desativar" : "Reativar"}
+                    </Button>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      <form
+        className="mt-6 grid gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setBusy(true);
+          setInfo("");
+          void addBranch({ name, address, phone })
+            .then(() => {
+              setName("");
+              setAddress("");
+              setPhone("");
+              setInfo("Filial criada. Troque a unidade no menu para cadastrar alunos nela.");
+            })
+            .catch((err: unknown) => setInfo(err instanceof Error ? err.message : "Não criou a filial."))
+            .finally(() => setBusy(false));
+        }}
+      >
+        <h3 className="text-sm font-medium">Nova filial</h3>
+        <Field label="Nome da unidade">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Unidade Centro" required />
+        </Field>
+        <Field label="Endereço">
+          <Input value={address} onChange={(e) => setAddress(e.target.value)} />
+        </Field>
+        <Field label="Telefone">
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </Field>
+        {info ? <p className="text-sm text-muted">{info}</p> : null}
+        <Button type="submit" disabled={busy || !name.trim()}>
+          {busy ? "Salvando…" : "Adicionar filial"}
         </Button>
       </form>
     </section>

@@ -8,6 +8,8 @@ import {
   addStockFn,
   addStudentFn,
   addPlanFn,
+  addBranchFn,
+  saveBranchFn,
   saveStudentFn,
   deleteStudentFn,
   savePlanFn,
@@ -37,6 +39,7 @@ import {
 import { alarmDue, enableNotifications, fireNotification, formatAlarm, ownerWaLink } from "@/lib/alarms";
 import { DEFAULT_CHARGE_TEXTS } from "@/lib/cobranca";
 import { loadFontFace } from "@/lib/fonts";
+import { matrizOf, scopeSnapshot } from "@/lib/branch-scope";
 import type { DojoSnapshot, Modality, ReminderSend, Student } from "@/lib/dojo-types";
 
 export type { Belt, ClassGroup, Invoice, Modality, Student } from "@/lib/dojo-types";
@@ -56,6 +59,7 @@ const EMPTY: DojoSnapshot = {
   waUrl: "",
   waOwner: false,
   blocked: false,
+  branches: [],
   students: [],
   classes: [],
   invoices: [],
@@ -72,6 +76,10 @@ const EMPTY: DojoSnapshot = {
 
 type Store = DojoSnapshot & {
   loading: boolean;
+  branchId: string;
+  setBranch: (id: string) => void;
+  addBranch: (d: { name: string; address?: string; phone?: string }) => Promise<void>;
+  saveBranch: (d: { id: string; name: string; address?: string; phone?: string; active?: boolean }) => Promise<void>;
   addStudent: (s: Omit<Student, "id" | "joined">) => Promise<void>;
   saveStudent: (d: {
     id: string;
@@ -91,6 +99,7 @@ type Store = DojoSnapshot & {
     planId?: string;
     dueDay?: number;
     status?: Student["status"];
+    branchId?: string;
   }) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
   addPlan: (d: { name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number }) => Promise<void>;
@@ -99,9 +108,9 @@ type Store = DojoSnapshot & {
   toggleAttendance: (studentId: string, classId: string, date: string, present: boolean) => Promise<void>;
   markPaid: (invoiceId: string) => Promise<void>;
   markReminderSent: (invoiceId: string, phase: ReminderSend["phase"]) => Promise<void>;
-  addPayable: (d: { title: string; vendor: string; category: string; amount: number; due: string }) => Promise<void>;
+  addPayable: (d: { title: string; vendor: string; category: string; amount: number; due: string; branchId?: string }) => Promise<void>;
   settlePayable: (id: string) => Promise<void>;
-  addAgenda: (d: { title: string; note: string; due: string; alarmAt: string }) => Promise<void>;
+  addAgenda: (d: { title: string; note: string; due: string; alarmAt: string; branchId?: string }) => Promise<void>;
   toggleAgenda: (id: string) => Promise<void>;
   markAlarm: (id: string) => Promise<void>;
   saveSchool: (d: {
@@ -126,15 +135,15 @@ type Store = DojoSnapshot & {
   testWhatsApp: () => Promise<void>;
   waState: () => Promise<"open" | "connecting" | "close">;
   waQr: () => Promise<{ qr: string; state: string }>;
-  addStaff: (d: { name: string; role: string; phone: string; pay: number }) => Promise<void>;
+  addStaff: (d: { name: string; role: string; phone: string; pay: number; branchId?: string }) => Promise<void>;
   saveStaff: (d: { id: string; name: string; role: string; phone: string; pay: number }) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
-  addStock: (d: { name: string; category: string; qty: number; minQty: number; unitCost: number; price: number }) => Promise<void>;
+  addStock: (d: { name: string; category: string; qty: number; minQty: number; unitCost: number; price: number; branchId?: string }) => Promise<void>;
   saveStock: (d: { id: string; name: string; category: string; qty: number; minQty: number; unitCost: number; price: number }) => Promise<void>;
   deleteStock: (id: string) => Promise<void>;
   adjustStock: (id: string, delta: number) => Promise<void>;
   sellStock: (d: { itemId: string; studentId: string; qty: number; payMethod: string }) => Promise<void>;
-  addClass: (d: { name: string; modality: string; days: string[]; time: string; timeEnd: string; instructor: string; capacity: number }) => Promise<void>;
+  addClass: (d: { name: string; modality: string; days: string[]; time: string; timeEnd: string; instructor: string; capacity: number; branchId?: string }) => Promise<void>;
   saveClass: (d: { id: string; name: string; modality: string; days: string[]; time: string; timeEnd: string; instructor: string; capacity: number }) => Promise<void>;
   deleteClass: (id: string) => Promise<void>;
   addChampionship: (d: {
@@ -189,12 +198,14 @@ function asSnap(next: unknown): DojoSnapshot | null {
     sales: n.sales ?? [],
     championships: n.championships ?? [],
     plans: n.plans ?? [],
+    branches: n.branches ?? [],
   };
 }
 
 export function DojoProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<DojoSnapshot>(EMPTY);
   const [loading, setLoading] = useState(true);
+  const [branchId, setBranchId] = useState("");
 
   const apply = (next: unknown) => {
     const snap = asSnap(next);
@@ -209,6 +220,26 @@ export function DojoProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh().catch(() => setLoading(false));
   }, [refresh]);
+
+  useEffect(() => {
+    try {
+      const saved = window.sessionStorage.getItem("ts-branch") || "";
+      if (saved && data.branches.some((b) => b.id === saved && b.active)) setBranchId(saved);
+    } catch {
+      /* ignore */
+    }
+  }, [data.branches]);
+
+  function pickBranch(id: string) {
+    setBranchId(id);
+    try {
+      window.sessionStorage.setItem("ts-branch", id);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const assignedBranch = branchId || matrizOf(data.branches)?.id || "";
 
   useEffect(() => {
     if (loading || !data.waReady || !data.waAuto) return;
@@ -256,9 +287,20 @@ export function DojoProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(id);
   }, [data.agenda, data.ownerPhone]);
 
+  const view = scopeSnapshot(data, branchId);
+
   const value: Store = {
-    ...data,
+    ...view,
+    branches: data.branches,
     loading,
+    branchId,
+    setBranch: pickBranch,
+    addBranch: async (d) => {
+      apply(await addBranchFn({ data: d }));
+    },
+    saveBranch: async (d) => {
+      apply(await saveBranchFn({ data: d }));
+    },
     addStudent: async (input) => {
       apply(
         await addStudentFn({
@@ -279,6 +321,7 @@ export function DojoProvider({ children }: { children: ReactNode }) {
             dueDay: input.dueDay,
             docs: input.docs,
             trial: input.status === "trial",
+            branchId: input.branchId || assignedBranch,
           },
         }),
       );
@@ -308,14 +351,14 @@ export function DojoProvider({ children }: { children: ReactNode }) {
       apply(await markReminderFn({ data: { invoiceId, phase } }));
     },
     addPayable: async (d) => {
-      apply(await addPayableFn({ data: d }));
+      apply(await addPayableFn({ data: { ...d, branchId: d.branchId || assignedBranch } }));
     },
     settlePayable: async (id) => {
       apply(await settlePayableFn({ data: id }));
     },
     addAgenda: async (d) => {
       if (d.alarmAt) void enableNotifications();
-      apply(await addAgendaFn({ data: d }));
+      apply(await addAgendaFn({ data: { ...d, branchId: d.branchId || assignedBranch } }));
     },
     toggleAgenda: async (id) => {
       apply(await toggleAgendaFn({ data: id }));
@@ -358,7 +401,7 @@ export function DojoProvider({ children }: { children: ReactNode }) {
       return waQrClient();
     },
     addStaff: async (d) => {
-      apply(await addStaffFn({ data: d }));
+      apply(await addStaffFn({ data: { ...d, branchId: d.branchId || assignedBranch } }));
     },
     saveStaff: async (d) => {
       apply(await saveStaffFn({ data: d }));
@@ -367,7 +410,7 @@ export function DojoProvider({ children }: { children: ReactNode }) {
       apply(await deleteStaffFn({ data: { id } }));
     },
     addStock: async (d) => {
-      apply(await addStockFn({ data: d }));
+      apply(await addStockFn({ data: { ...d, branchId: d.branchId || assignedBranch } }));
     },
     saveStock: async (d) => {
       apply(await saveStockFn({ data: d }));
@@ -382,7 +425,7 @@ export function DojoProvider({ children }: { children: ReactNode }) {
       apply(await sellStockFn({ data: d }));
     },
     addClass: async (d) => {
-      apply(await addClassFn({ data: d }));
+      apply(await addClassFn({ data: { ...d, branchId: d.branchId || assignedBranch } }));
     },
     saveClass: async (d) => {
       apply(await saveClassFn({ data: d }));
@@ -391,7 +434,7 @@ export function DojoProvider({ children }: { children: ReactNode }) {
       apply(await deleteClassFn({ data: { id } }));
     },
     addChampionship: async (d) => {
-      apply(await addChampionshipFn({ data: d }));
+      apply(await addChampionshipFn({ data: { ...d, branchId: assignedBranch } }));
     },
     saveChampionship: async (d) => {
       apply(await saveChampionshipFn({ data: d }));
