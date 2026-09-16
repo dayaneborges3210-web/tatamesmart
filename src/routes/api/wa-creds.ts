@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { academyOf } from "@/lib/academy-actor";
 import { auth } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
 import { ensureSchoolWa } from "@/lib/platform-wa.server";
@@ -33,16 +34,21 @@ export const Route = createFileRoute("/api/wa-creds")({
         const userId = session?.user?.id ?? "";
         if (!userId) return Response.json({ message: "Entre de novo." }, { status: 401 });
         try {
-          const creds = await ensureSchoolWa(userId);
+          const branch = new URL(request.url).searchParams.get("branch") || "";
+          const actor = await academyOf(userId);
+          const creds = await ensureSchoolWa(userId, branch);
           const sql = await getSql();
           const rows = await sql<{ owner_phone: string | null }>`
-            select owner_phone from schools where user_id = ${userId}
+            select owner_phone from schools where user_id = ${actor.ownerId}
+          `;
+          const unit = await sql<{ phone: string | null }>`
+            select phone from branches where user_id = ${actor.ownerId} and id = ${actor.lockedBranchId || branch} limit 1
           `;
           return Response.json({
             url: creds.url,
             instance: creds.instance,
             token: creds.token,
-            ownerPhone: rows[0]?.owner_phone ?? "",
+            ownerPhone: unit[0]?.phone || rows[0]?.owner_phone || "",
           }, { headers: { "Cache-Control": "no-store, private", "Vary": "Cookie, Authorization" } });
         } catch (err) {
           return Response.json(

@@ -59,6 +59,8 @@ const EMPTY: DojoSnapshot = {
   waUrl: "",
   waOwner: false,
   blocked: false,
+  role: "owner",
+  lockedBranchId: "",
   branches: [],
   students: [],
   classes: [],
@@ -135,8 +137,8 @@ type Store = DojoSnapshot & {
   testWhatsApp: () => Promise<void>;
   waState: () => Promise<"open" | "connecting" | "close">;
   waQr: () => Promise<{ qr: string; state: string }>;
-  addStaff: (d: { name: string; role: string; phone: string; pay: number; branchId?: string }) => Promise<void>;
-  saveStaff: (d: { id: string; name: string; role: string; phone: string; pay: number }) => Promise<void>;
+  addStaff: (d: { name: string; role: string; phone: string; pay: number; branchId?: string; email?: string; password?: string }) => Promise<void>;
+  saveStaff: (d: { id: string; name: string; role: string; phone: string; pay: number; email?: string; password?: string }) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
   addStock: (d: { name: string; category: string; qty: number; minQty: number; unitCost: number; price: number; branchId?: string }) => Promise<void>;
   saveStock: (d: { id: string; name: string; category: string; qty: number; minQty: number; unitCost: number; price: number }) => Promise<void>;
@@ -222,15 +224,20 @@ export function DojoProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
+    if (data.lockedBranchId) {
+      setBranchId(data.lockedBranchId);
+      return;
+    }
     try {
       const saved = window.sessionStorage.getItem("ts-branch") || "";
       if (saved && data.branches.some((b) => b.id === saved && b.active)) setBranchId(saved);
     } catch {
       /* ignore */
     }
-  }, [data.branches]);
+  }, [data.branches, data.lockedBranchId]);
 
   function pickBranch(id: string) {
+    if (data.lockedBranchId) return;
     setBranchId(id);
     try {
       window.sessionStorage.setItem("ts-branch", id);

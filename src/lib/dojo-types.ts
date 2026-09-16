@@ -187,6 +187,8 @@ export type Staff = {
   phone: string;
   pay: number;
   branchId: string;
+  email: string;
+  hasLogin: boolean;
 };
 
 export type StockItem = {
@@ -260,6 +262,8 @@ export type DojoSnapshot = {
   waUrl: string;
   waOwner: boolean;
   blocked: boolean;
+  role: "owner" | "staff";
+  lockedBranchId: string;
   branches: Branch[];
   students: Student[];
   classes: ClassGroup[];

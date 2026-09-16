@@ -1,3 +1,4 @@
+import { academyOf } from "@/lib/academy-actor";
 import { createFileRoute } from "@tanstack/react-router";
 import { auth } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
@@ -28,8 +29,8 @@ async function sessionUserId(request: Request) {
   return session?.user?.id ?? "";
 }
 
-async function platformCreds(userId: string) {
-  return ensureSchoolWa(userId);
+async function platformCreds(userId: string, branchId?: string) {
+  return ensureSchoolWa(userId, branchId);
 }
 
 export const Route = createFileRoute("/api/whatsapp")({
@@ -41,18 +42,19 @@ export const Route = createFileRoute("/api/whatsapp")({
         }
         const userId = await sessionUserId(request);
         if (!userId) return Response.json({ message: "Entre de novo." }, { status: 401 });
-        let body: { action?: string } = {};
+        let body: { action?: string; branchId?: string } = {};
         try {
           body = (await request.json()) as typeof body;
         } catch {
           body = {};
         }
         try {
-          const creds = await platformCreds(userId);
+          const creds = await platformCreds(userId, body.branchId);
           if (body.action === "test") {
+            const actor = await academyOf(userId);
             const sql = await getSql();
             const rows = await sql<{ name: string; owner_phone: string | null }>`
-              select name, owner_phone from schools where user_id = ${userId}
+              select name, owner_phone from schools where user_id = ${actor.ownerId}
             `;
             if (!rows[0]?.owner_phone) {
               throw new Error("Cadastre o WhatsApp do dono em Identidade.");

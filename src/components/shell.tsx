@@ -46,7 +46,7 @@ export function Shell({ children }: { children: ReactNode }) {
 function ShellInner({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const user = useCurrentUser();
-  const { school, logo, invoices, reminders, payables, agenda, stock, loading, blocked, waOwner, branches, branchId, setBranch } = useDojo();
+  const { school, logo, invoices, reminders, payables, agenda, stock, loading, blocked, waOwner, branches, branchId, setBranch, role, lockedBranchId } = useDojo();
   const [leaving, setLeaving] = useState(false);
   const today = todayISO();
   const queueCount = invoices.filter((inv) => {
@@ -60,7 +60,7 @@ function ShellInner({ children }: { children: ReactNode }) {
   const agendaCount = agenda.filter((a) => !a.done && a.due <= today).length;
   const stockLow = stock.filter((s) => s.qty <= s.minQty).length;
 
-  const mae = waOwner && isMaeEmail(user?.primaryEmail);
+  const mae = waOwner && isMaeEmail(user?.primaryEmail) && role !== "staff";
   const nav = (
     <nav className="flex flex-col gap-1 p-3">
       {NAV.filter((item) => item.to !== "/empresa" || mae).map((item) => {
@@ -119,13 +119,13 @@ function ShellInner({ children }: { children: ReactNode }) {
               <BrandMark school={school} logo={logo} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold tracking-tight">{loading ? "…" : school || "TatameSmart"}</p>
-                <BranchSwitch branches={branches} branchId={branchId} onChange={setBranch} />
+                <BranchSwitch branches={branches} branchId={branchId} onChange={setBranch} locked={Boolean(lockedBranchId)} />
               </div>
             </>
           ) : (
             <div className="min-w-0 flex-1">
               <TatameLogo compact title={loading ? "…" : school || "TATAMESMART"} />
-              <BranchSwitch branches={branches} branchId={branchId} onChange={setBranch} />
+              <BranchSwitch branches={branches} branchId={branchId} onChange={setBranch} locked={Boolean(lockedBranchId)} />
             </div>
           )}
         </div>
@@ -172,13 +172,23 @@ function BranchSwitch({
   branches,
   branchId,
   onChange,
+  locked,
 }: {
   branches: Branch[];
   branchId: string;
   onChange: (id: string) => void;
+  locked?: boolean;
 }) {
   const live = activeBranches(branches);
+  const current = live.find((b) => b.id === branchId);
   if (!live.length) return <p className="text-xs text-muted">TatameSmart</p>;
+  if (locked) {
+    return (
+      <p className="mt-1 truncate text-xs text-muted">
+        {current ? (current.kind === "matriz" ? `Matriz · ${current.name}` : current.name) : "Filial"}
+      </p>
+    );
+  }
   return (
     <select
       className="mt-1 w-full truncate rounded-sm border-0 bg-transparent p-0 text-xs text-muted outline-none"

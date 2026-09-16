@@ -1,9 +1,11 @@
+import { randomBytes } from "node:crypto";
+import { hashPassword } from "better-auth/crypto";
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
-import { authMiddleware } from "@/lib/auth/middleware";
+import { academyMiddleware, academyOf, ensureStaffLoginCols } from "@/lib/academy-actor";
 import { getSql } from "@/lib/db";
 import { DEFAULT_CHARGE_TEXTS, buildMessage, invoiceStatus, phaseFor } from "@/lib/cobranca";
 import { sendWhatsAppText, evolutionQr, evolutionState } from "@/lib/whatsapp";
-import { ensurePlatformWa, ensureSchoolWa, savePlatformWa, waReadyOf } from "@/lib/platform-wa.server";
+import { ensureBranchWa, ensurePlatformWa, ensureSchoolWa, savePlatformWa, waReadyOf } from "@/lib/platform-wa.server";
 import { addDaysISO, addMinutesHHMM, classDates, daysUntil, todayISO, WEEKDAYS } from "@/lib/money";
 import type {
   AgendaItem,
@@ -26,6 +28,81 @@ function asDate(v: unknown) {
   if (typeof v === "string") return v.slice(0, 10);
   if (v instanceof Date) return v.toISOString().slice(0, 10);
   return String(v);
+}
+
+function newLoginId() {
+  return randomBytes(24).toString("base64url");
+}
+
+async function upsertStaffLogin(ownerId: string, staffId: string, emailRaw: string, password: string) {
+  await ensureStaffLoginCols();
+  const email = emailRaw.trim().toLowerCase();
+  if (!email.includes("@")) throw new Error("Informe o e-mail do professor.");
+  if (isMaeEmail(email)) throw new Error("Esse e-mail é da empresa mãe.");
+  if (password.length < 8) throw new Error("A senha do professor precisa ter pelo menos 8 caracteres.");
+  const sql = await getSql();
+  const staff = await sql<{ login_user_id: string | null }>`
+    select login_user_id from staff where id = ${staffId} and user_id = ${ownerId}
+  `;
+  if (!staff[0]) throw new Error("Professor não encontrado.");
+  const existing = await sql<{ id: string }>`select id from "user" where lower(email) = ${email} limit 1`;
+  const currentLogin = (staff[0].login_user_id ?? "").trim();
+  if (existing[0] && existing[0].id !== currentLogin) {
+    throw new Error("Esse e-mail já entra em outra conta.");
+  }
+  const hashed = await hashPassword(password);
+  let loginId = currentLogin;
+  if (!loginId) {
+    loginId = existing[0]?.id || newLoginId();
+    if (!existing[0]) {
+      await sql`
+        insert into "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+        values (${loginId}, ${email.split("@")[0]}, ${email}, false, now(), now())
+      `;
+    }
+    await sql`
+      insert into "account" (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
+      values (${newLoginId()}, ${loginId}, ${"credential"}, ${loginId}, ${hashed}, now(), now())
+    `;
+    const acc = await sql<{ id: string }>`
+      select id from "account" where "userId" = ${loginId} and "providerId" = ${"credential"} limit 1
+    `;
+    if (acc[0]) {
+      await sql`update "account" set password = ${hashed}, "updatedAt" = now() where id = ${acc[0].id}`;
+    }
+  } else {
+    await sql`update "user" set email = ${email}, "updatedAt" = now() where id = ${loginId}`;
+    const acc = await sql<{ id: string }>`
+      select id from "account" where "userId" = ${loginId} and "providerId" = ${"credential"} limit 1
+    `;
+    if (acc[0]) {
+      await sql`update "account" set password = ${hashed}, "updatedAt" = now() where id = ${acc[0].id}`;
+    } else {
+      await sql`
+        insert into "account" (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
+        values (${newLoginId()}, ${loginId}, ${"credential"}, ${loginId}, ${hashed}, now(), now())
+      `;
+    }
+  }
+  await sql`update staff set email = ${email}, login_user_id = ${loginId} where id = ${staffId} and user_id = ${ownerId}`;
+}
+
+async function dropStaffLogin(ownerId: string, staffId: string) {
+  const sql = await getSql();
+  await ensureStaffLoginCols();
+  const rows = await sql<{ login_user_id: string | null }>`
+    select login_user_id from staff where id = ${staffId} and user_id = ${ownerId}
+  `;
+  const loginId = (rows[0]?.login_user_id ?? "").trim();
+  await sql`delete from staff where id = ${staffId} and user_id = ${ownerId}`;
+  if (!loginId) return;
+  const still = await sql<{ id: string }>`select id from staff where login_user_id = ${loginId} limit 1`;
+  if (still.length) return;
+  const school = await sql<{ user_id: string }>`select user_id from schools where user_id = ${loginId} limit 1`;
+  if (school.length) return;
+  await sql`delete from "session" where "userId" = ${loginId}`;
+  await sql`delete from "account" where "userId" = ${loginId}`;
+  await sql`delete from "user" where id = ${loginId}`;
 }
 
 async function ensureAcademyExtras() {
@@ -128,17 +205,20 @@ async function ensureBranches(userId: string, schoolName: string): Promise<Branc
   }));
 }
 
-async function resolveBranchId(userId: string, requested: string | undefined, schoolName: string) {
+async function resolveBranchId(userId: string, requested: string | undefined, schoolName: string, lockedBranchId = "") {
+  if (lockedBranchId) return lockedBranchId;
   const branches = await ensureBranches(userId, schoolName);
   const hit = branches.find((b) => b.id === requested && b.active);
   if (hit) return hit.id;
   return (branches.find((b) => b.kind === "matriz") ?? branches[0]).id;
 }
 
-async function snapshot(userId: string): Promise<DojoSnapshot> {
+async function snapshot(userId: string, sessionUserId = userId): Promise<DojoSnapshot> {
+  const actor = await academyOf(sessionUserId);
+  userId = actor.ownerId;
   const sql = await getSql();
   await ensureAcademyExtras();
-  const me = await sql<{ email: string | null }>`select email from "user" where id = ${userId}`;
+  const me = await sql<{ email: string | null }>`select email from "user" where id = ${actor.sessionUserId}`;
   const mail = (me[0]?.email ?? "").trim().toLowerCase();
   const schools = await sql<{
     name: string;
@@ -288,7 +368,9 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
     phone: string;
     pay: number;
     branch_id: string | null;
-  }>`select id, name, role, phone, pay, branch_id from staff where user_id = ${userId} order by name`;
+    email: string | null;
+    login_user_id: string | null;
+  }>`select id, name, role, phone, pay, branch_id, email, login_user_id from staff where user_id = ${userId} order by name`;
   const stockRows = await sql<{
     id: string;
     name: string;
@@ -372,6 +454,8 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
     waUrl,
     waOwner,
     blocked: accessStatus === "blocked" && !isMaeEmail(mail),
+    role: actor.isStaff ? "staff" : "owner",
+    lockedBranchId: actor.lockedBranchId,
     branches,
     classes: classRows.map((c) => ({
       id: c.id,
@@ -450,6 +534,8 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
       phone: s.phone,
       pay: Number(s.pay),
       branchId: s.branch_id || "",
+      email: (s.email ?? "").trim().toLowerCase(),
+      hasLogin: Boolean((s.login_user_id ?? "").trim()),
     })),
     stock: stockRows.map((s) => ({
       id: s.id,
@@ -761,7 +847,7 @@ async function wipeDemoSeedFromRealSchool(userId: string) {
 }
 
 export const loadDojo = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .handler(async ({ context }) => {
     const sql = await getSql();
     const users = await sql<{ name: string | null; email: string | null }>`
@@ -775,7 +861,7 @@ export const loadDojo = createServerFn({ method: "GET" })
 
     if (isMaeEmail(email)) {
       if (!found.length) await seedIfNeeded(context.userId, "TatameSmart", false);
-      return snapshot(context.userId);
+      return snapshot(context.userId, context.sessionUserId);
     }
 
     if (!found.length) {
@@ -797,10 +883,10 @@ export const loadDojo = createServerFn({ method: "GET" })
         }
       }
     }
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
-async function dispatchToday(userId: string) {
+async function dispatchToday(userId: string, sessionUserId = userId) {
   const sql = await getSql();
   await sql.query(`
     create table if not exists wa_dispatch_claims (
@@ -814,14 +900,30 @@ async function dispatchToday(userId: string) {
       primary key (user_id, kind, item_id, dispatch_day)
     )
   `);
-  const creds = await ensureSchoolWa(userId);
-  const { token, url, instance: phoneId } = creds;
-  const snap = await snapshot(userId);
+  const snap = await snapshot(userId, sessionUserId);
   const today = todayISO();
   let sent = 0;
   let failed = 0;
   const errors: string[] = [];
-  for (const inv of snap.invoices) {
+  const credsCache = new Map<string, { url: string; instance: string; token: string }>();
+  const matrizId = snap.branches.find((b) => b.kind === "matriz")?.id || snap.lockedBranchId;
+  async function credsFor(branchId: string) {
+    const key = branchId || matrizId || "default";
+    const hit = credsCache.get(key);
+    if (hit) return hit;
+    const unit = branchId || matrizId;
+    const creds = unit ? await ensureBranchWa(userId, unit) : await ensureSchoolWa(userId);
+    credsCache.set(key, creds);
+    return creds;
+  }
+  const invoices = snap.lockedBranchId
+    ? snap.invoices.filter((inv) => {
+        if (inv.branchId === snap.lockedBranchId) return true;
+        const student = snap.students.find((s) => s.id === inv.studentId);
+        return Boolean(student && student.branchId === snap.lockedBranchId);
+      })
+    : snap.invoices;
+  for (const inv of invoices) {
     const status = invoiceStatus(inv, today);
     if (status === "paga") continue;
     const phase = phaseFor(daysUntil(inv.due, today));
@@ -846,7 +948,8 @@ async function dispatchToday(userId: string) {
       on conflict do nothing returning item_id`;
     if (!claim.length) continue;
     try {
-      await sendWhatsAppText({ token, url, instance: phoneId, to: student.phone, body: text });
+      const creds = await credsFor(student.branchId || inv.branchId || matrizId);
+      await sendWhatsAppText({ ...creds, to: student.phone, body: text });
       const id = `${userId}:r${Date.now()}${sent}`;
       await sql`insert into reminders (id, user_id, invoice_id, date, phase)
         values (${id}, ${userId}, ${inv.id}, ${today}, ${phase})`;
@@ -934,14 +1037,14 @@ export const runWaBot = createServerOnlyFn(async () => {
 });
 
 export const dispatchTodayFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .handler(async ({ context }) => {
-    const result = await dispatchToday(context.userId);
-    return { ...result, snapshot: await snapshot(context.userId) };
+    const result = await dispatchToday(context.userId, context.sessionUserId);
+    return { ...result, snapshot: await snapshot(context.userId, context.sessionUserId) };
   });
 
 export const testWhatsAppFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .handler(async ({ context }) => {
     const sql = await getSql();
     const rows = await sql<{
@@ -972,7 +1075,7 @@ async function schoolWa(userId: string) {
 }
 
 export const waStateFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .handler(async ({ context }) => {
     const creds = await schoolWa(context.userId);
     const state = await evolutionState(creds);
@@ -980,14 +1083,14 @@ export const waStateFn = createServerFn({ method: "POST" })
   });
 
 export const waQrFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .handler(async ({ context }) => {
     const creds = await schoolWa(context.userId);
     return evolutionQr(creds);
   });
 
 export const addStudentFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator(
     (d: {
       name: string;
@@ -1014,7 +1117,7 @@ export const addStudentFn = createServerFn({ method: "POST" })
     await ensureAcademyExtras();
     const id = `${context.userId}:s${Date.now()}`;
     const t = todayISO();
-    const branchId = await resolveBranchId(context.userId, data.branchId, "");
+    const branchId = await resolveBranchId(context.userId, data.branchId, "", context.lockedBranchId);
     const plans = await sql<{ id: string; amount: number; due_day: number }>`
       select id, amount, due_day from plans
       where user_id = ${context.userId} and id = ${data.planId ?? ""} and (branch_id = ${branchId} or branch_id = ${""})
@@ -1037,11 +1140,11 @@ export const addStudentFn = createServerFn({ method: "POST" })
       values (${id}, ${context.userId}, ${data.name}, ${data.phone}, ${data.modality}, ${data.belt}, ${degree}, ${data.classId}, ${status}, ${t}, ${cpf}, ${address}, ${cep}, ${hasHealth}, ${healthNote}, ${birth}, ${planId}, ${dueDay}, ${docs}, ${branchId})`;
     await sql`insert into invoices (id, user_id, student_id, month, amount, status, due, branch_id)
       values (${`inv-${id}`}, ${context.userId}, ${id}, ${due.slice(0, 7)}, ${amount}, ${"aberta"}, ${due}, ${branchId})`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const saveStudentFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator(
     (d: {
       id: string;
@@ -1108,14 +1211,14 @@ export const saveStudentFn = createServerFn({ method: "POST" })
       await sql`update students set status = ${data.status} where id = ${data.id} and user_id = ${context.userId}`;
     }
     if (data.branchId !== undefined) {
-      const branchId = await resolveBranchId(context.userId, data.branchId, "");
+      const branchId = await resolveBranchId(context.userId, data.branchId, "", context.lockedBranchId);
       await sql`update students set branch_id = ${branchId} where id = ${data.id} and user_id = ${context.userId}`;
     }
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const deleteStudentFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { id: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1125,11 +1228,11 @@ export const deleteStudentFn = createServerFn({ method: "POST" })
     await sql`delete from invoices where student_id = ${data.id} and user_id = ${context.userId}`;
     await sql`delete from attendance where student_id = ${data.id} and user_id = ${context.userId}`;
     await sql`delete from students where id = ${data.id} and user_id = ${context.userId}`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const addPlanFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator(
     (d: { name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number; branchId?: string }) => d,
   )
@@ -1144,14 +1247,14 @@ export const addPlanFn = createServerFn({ method: "POST" })
     const weekly = Math.max(0, Math.round(data.weeklyLimit));
     const dueDay = clampDueDay(data.dueDay);
     const billing = data.billing === "unico" ? "unico" : "mensal";
-    const branchId = await resolveBranchId(context.userId, data.branchId, "");
+    const branchId = await resolveBranchId(context.userId, data.branchId, "", context.lockedBranchId);
     await sql`insert into plans (id, user_id, name, duration_months, billing, amount, weekly_limit, due_day, branch_id)
       values (${id}, ${context.userId}, ${name}, ${duration}, ${billing}, ${amount}, ${weekly}, ${dueDay}, ${branchId})`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const savePlanFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator(
     (d: { id: string; name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number }) => d,
   )
@@ -1167,22 +1270,22 @@ export const savePlanFn = createServerFn({ method: "POST" })
     const billing = data.billing === "unico" ? "unico" : "mensal";
     await sql`update plans set name = ${name}, duration_months = ${duration}, billing = ${billing}, amount = ${amount}, weekly_limit = ${weekly}, due_day = ${dueDay}
       where id = ${data.id} and user_id = ${context.userId}`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const deletePlanFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { id: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     await ensureAcademyExtras();
     await sql`update students set plan_id = ${""} where plan_id = ${data.id} and user_id = ${context.userId}`;
     await sql`delete from plans where id = ${data.id} and user_id = ${context.userId}`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const toggleAttendanceFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { studentId: string; classId: string; date: string; present: boolean }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1198,20 +1301,20 @@ export const toggleAttendanceFn = createServerFn({ method: "POST" })
       await sql`insert into attendance (id, user_id, student_id, class_id, date, present)
         values (${id}, ${context.userId}, ${data.studentId}, ${data.classId}, ${date}, ${data.present})`;
     }
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const markPaidFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((id: string) => id)
   .handler(async ({ context, data: invoiceId }) => {
     const sql = await getSql();
     await sql`update invoices set status = ${"paga"} where id = ${invoiceId} and user_id = ${context.userId}`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const markReminderFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { invoiceId: string; phase: ReminderSend["phase"] }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1224,45 +1327,45 @@ export const markReminderFn = createServerFn({ method: "POST" })
       await sql`insert into reminders (id, user_id, invoice_id, date, phase)
         values (${id}, ${context.userId}, ${data.invoiceId}, ${date}, ${data.phase})`;
     }
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const addPayableFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { title: string; vendor: string; category: string; amount: number; due: string; branchId?: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const id = `${context.userId}:p${Date.now()}`;
     const status = daysUntil(data.due) < 0 ? "atrasada" : "aberta";
-    const branchId = await resolveBranchId(context.userId, data.branchId, "");
+    const branchId = await resolveBranchId(context.userId, data.branchId, "", context.lockedBranchId);
     await sql`insert into payables (id, user_id, title, vendor, category, amount, due, status, branch_id)
       values (${id}, ${context.userId}, ${data.title}, ${data.vendor}, ${data.category}, ${data.amount}, ${data.due}, ${status}, ${branchId})`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const settlePayableFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((id: string) => id)
   .handler(async ({ context, data: id }) => {
     const sql = await getSql();
     await sql`update payables set status = ${"paga"} where id = ${id} and user_id = ${context.userId}`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const addAgendaFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { title: string; note: string; due: string; alarmAt: string; branchId?: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const id = `${context.userId}:a${Date.now()}`;
-    const branchId = await resolveBranchId(context.userId, data.branchId, "");
+    const branchId = await resolveBranchId(context.userId, data.branchId, "", context.lockedBranchId);
     await sql`insert into agenda (id, user_id, title, note, due, done, alarm_at, alarm_sent, branch_id)
       values (${id}, ${context.userId}, ${data.title}, ${data.note}, ${data.due}, ${false}, ${data.alarmAt}, ${false}, ${branchId})`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const toggleAgendaFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((id: string) => id)
   .handler(async ({ context, data: id }) => {
     const sql = await getSql();
@@ -1273,20 +1376,20 @@ export const toggleAgendaFn = createServerFn({ method: "POST" })
       const next = !rows[0].done;
       await sql`update agenda set done = ${next} where id = ${id} and user_id = ${context.userId}`;
     }
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const markAlarmFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((id: string) => id)
   .handler(async ({ context, data: id }) => {
     const sql = await getSql();
     await sql`update agenda set alarm_sent = ${true} where id = ${id} and user_id = ${context.userId}`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const saveSchoolFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: {
     name: string;
     theme: string;
@@ -1331,57 +1434,67 @@ export const saveSchoolFn = createServerFn({ method: "POST" })
         token: data.waToken,
       });
     }
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const addStaffFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator((d: { name: string; role: string; phone: string; pay: number; branchId?: string }) => d)
+  .middleware([academyMiddleware])
+  .validator((d: { name: string; role: string; phone: string; pay: number; branchId?: string; email?: string; password?: string }) => d)
   .handler(async ({ context, data }) => {
+    if (context.isStaff) throw new Error("Só o dono libera o login da filial.");
     const sql = await getSql();
+    await ensureStaffLoginCols();
     const id = `${context.userId}:t${Date.now()}`;
-    const branchId = await resolveBranchId(context.userId, data.branchId, "");
-    await sql`insert into staff (id, user_id, name, role, phone, pay, branch_id)
-      values (${id}, ${context.userId}, ${data.name}, ${data.role}, ${data.phone}, ${data.pay}, ${branchId})`;
-    return snapshot(context.userId);
+    const branchId = await resolveBranchId(context.userId, data.branchId, "", context.lockedBranchId);
+    await sql`insert into staff (id, user_id, name, role, phone, pay, branch_id, email)
+      values (${id}, ${context.userId}, ${data.name}, ${data.role}, ${data.phone}, ${data.pay}, ${branchId}, ${(data.email ?? "").trim().toLowerCase()})`;
+    if ((data.email ?? "").trim() && (data.password ?? "").trim()) {
+      await upsertStaffLogin(context.userId, id, data.email ?? "", data.password ?? "");
+    }
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const saveStaffFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator((d: { id: string; name: string; role: string; phone: string; pay: number }) => d)
+  .middleware([academyMiddleware])
+  .validator((d: { id: string; name: string; role: string; phone: string; pay: number; email?: string; password?: string }) => d)
   .handler(async ({ context, data }) => {
+    if (context.isStaff) throw new Error("Só o dono altera o login da filial.");
     const sql = await getSql();
     const name = data.name.trim().slice(0, 80);
     if (!name) throw new Error("Dê um nome ao professor.");
-    await sql`update staff set name = ${name}, role = ${data.role.slice(0, 40)}, phone = ${data.phone.slice(0, 20)}, pay = ${Math.max(0, Math.round(data.pay))}
+    await ensureStaffLoginCols();
+    await sql`update staff set name = ${name}, role = ${data.role.slice(0, 40)}, phone = ${data.phone.slice(0, 20)}, pay = ${Math.max(0, Math.round(data.pay))}, email = ${(data.email ?? "").trim().toLowerCase()}
       where id = ${data.id} and user_id = ${context.userId}`;
-    return snapshot(context.userId);
+    if ((data.email ?? "").trim() && (data.password ?? "").trim()) {
+      await upsertStaffLogin(context.userId, data.id, data.email ?? "", data.password ?? "");
+    }
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const deleteStaffFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { id: string }) => d)
   .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    await sql`delete from staff where id = ${data.id} and user_id = ${context.userId}`;
-    return snapshot(context.userId);
+    if (context.isStaff) throw new Error("Só o dono exclui professor.");
+    await dropStaffLogin(context.userId, data.id);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const addStockFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { name: string; category: string; qty: number; minQty: number; unitCost: number; price: number; branchId?: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const id = `${context.userId}:k${Date.now()}`;
     const price = data.price || data.unitCost * 2;
-    const branchId = await resolveBranchId(context.userId, data.branchId, "");
+    const branchId = await resolveBranchId(context.userId, data.branchId, "", context.lockedBranchId);
     await sql`insert into stock_items (id, user_id, name, category, qty, min_qty, unit_cost, price, branch_id)
       values (${id}, ${context.userId}, ${data.name}, ${data.category}, ${data.qty}, ${data.minQty}, ${data.unitCost}, ${price}, ${branchId})`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const adjustStockFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { id: string; delta: number }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1392,16 +1505,16 @@ export const adjustStockFn = createServerFn({ method: "POST" })
       const qty = Math.max(0, Number(rows[0].qty) + data.delta);
       await sql`update stock_items set qty = ${qty} where id = ${data.id} and user_id = ${context.userId}`;
     }
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const saveStockFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { id: string; name: string; category: string; qty: number; minQty: number; unitCost: number; price: number }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const name = data.name.trim().slice(0, 80);
-    if (!name) return snapshot(context.userId);
+    if (!name) return snapshot(context.userId, context.sessionUserId);
     const qty = Math.max(0, Math.floor(data.qty) || 0);
     const minQty = Math.max(0, Math.floor(data.minQty) || 0);
     const unitCost = Math.max(0, Math.floor(data.unitCost) || 0);
@@ -1412,20 +1525,20 @@ export const saveStockFn = createServerFn({ method: "POST" })
       set name = ${name}, category = ${cat}, qty = ${qty}, min_qty = ${minQty}, unit_cost = ${unitCost}, price = ${price}
       where id = ${data.id} and user_id = ${context.userId}
     `;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const deleteStockFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { id: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     await sql`delete from stock_items where id = ${data.id} and user_id = ${context.userId}`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const sellStockFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { itemId: string; studentId: string; qty: number; payMethod: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1435,20 +1548,20 @@ export const sellStockFn = createServerFn({ method: "POST" })
       select id, name, qty, price, unit_cost from stock_items where id = ${data.itemId} and user_id = ${context.userId}
     `;
     const item = rows[0];
-    if (!item || Number(item.qty) < qty) return snapshot(context.userId);
+    if (!item || Number(item.qty) < qty) return snapshot(context.userId, context.sessionUserId);
     const price = Number(item.price) || Number(item.unit_cost) * 2;
     const next = Number(item.qty) - qty;
     await sql`update stock_items set qty = ${next} where id = ${item.id} and user_id = ${context.userId}`;
     const id = `${context.userId}:v${Date.now()}`;
-    const branchId = await resolveBranchId(context.userId, undefined, "");
+    const branchId = await resolveBranchId(context.userId, undefined, "", context.lockedBranchId);
     const itemBranch = await sql<{ branch_id: string | null }>`select branch_id from stock_items where id = ${item.id}`;
     await sql`insert into sales (id, user_id, student_id, item_id, item_name, qty, unit_price, total, pay_method, sold_on, branch_id)
       values (${id}, ${context.userId}, ${data.studentId}, ${item.id}, ${item.name}, ${qty}, ${price}, ${price * qty}, ${method}, ${todayISO()}, ${itemBranch[0]?.branch_id || branchId})`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const addClassFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { name: string; modality: string; days: string[]; time: string; timeEnd: string; instructor: string; capacity: number; branchId?: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1457,14 +1570,14 @@ export const addClassFn = createServerFn({ method: "POST" })
     const cap = Math.max(1, Math.floor(data.capacity) || 20);
     const start = data.time.slice(0, 8);
     const end = (data.timeEnd || addMinutesHHMM(start, 60)).slice(0, 8);
-    const branchId = await resolveBranchId(context.userId, data.branchId, "");
+    const branchId = await resolveBranchId(context.userId, data.branchId, "", context.lockedBranchId);
     await sql`insert into classes (id, user_id, name, modality, days, time, time_end, instructor, capacity, branch_id)
       values (${id}, ${context.userId}, ${data.name.trim().slice(0, 80)}, ${data.modality}, ${days}, ${start}, ${end}, ${data.instructor.trim().slice(0, 80)}, ${cap}, ${branchId})`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const saveClassFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { id: string; name: string; modality: string; days: string[]; time: string; timeEnd: string; instructor: string; capacity: number }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1474,18 +1587,18 @@ export const saveClassFn = createServerFn({ method: "POST" })
     const end = (data.timeEnd || addMinutesHHMM(start, 60)).slice(0, 8);
     await sql`update classes set name = ${data.name.trim().slice(0, 80)}, modality = ${data.modality}, days = ${days}, time = ${start}, time_end = ${end}, instructor = ${data.instructor.trim().slice(0, 80)}, capacity = ${cap}
       where id = ${data.id} and user_id = ${context.userId}`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const deleteClassFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { id: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     await sql`update students set class_id = ${""} where class_id = ${data.id} and user_id = ${context.userId}`;
     await sql`delete from attendance where class_id = ${data.id} and user_id = ${context.userId}`;
     await sql`delete from classes where id = ${data.id} and user_id = ${context.userId}`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 type ChampIn = {
@@ -1519,7 +1632,7 @@ function packChamp(data: ChampIn) {
 }
 
 export const addChampionshipFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: ChampIn) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1531,14 +1644,14 @@ export const addChampionshipFn = createServerFn({ method: "POST" })
       .filter((id) => allowed.some((s) => s.id === id && s.modality === row.modality))
       .join(",");
     const id = `${context.userId}:ch${Date.now()}`;
-    const branchId = await resolveBranchId(context.userId, data.branchId, "");
+    const branchId = await resolveBranchId(context.userId, data.branchId, "", context.lockedBranchId);
     await sql`insert into championships (id, user_id, name, place, date, time, participants, gold, silver, bronze, trophies, modality, branch_id)
       values (${id}, ${context.userId}, ${row.name}, ${row.place}, ${row.date}, ${row.time}, ${participants}, ${row.gold}, ${row.silver}, ${row.bronze}, ${row.trophies}, ${row.modality}, ${branchId})`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const saveChampionshipFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: ChampIn & { id: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1551,13 +1664,14 @@ export const saveChampionshipFn = createServerFn({ method: "POST" })
       .join(",");
     await sql`update championships set name = ${row.name}, place = ${row.place}, date = ${row.date}, time = ${row.time}, participants = ${participants}, gold = ${row.gold}, silver = ${row.silver}, bronze = ${row.bronze}, trophies = ${row.trophies}, modality = ${row.modality}
       where id = ${data.id} and user_id = ${context.userId}`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const addBranchFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { name: string; address?: string; phone?: string; pix?: string }) => d)
   .handler(async ({ context, data }) => {
+    if (context.isStaff) throw new Error("Só o dono cadastra filial.");
     const sql = await getSql();
     await ensureBranches(context.userId, "");
     const name = data.name.trim().slice(0, 80);
@@ -1565,13 +1679,14 @@ export const addBranchFn = createServerFn({ method: "POST" })
     const id = `${context.userId}:b${Date.now()}`;
     await sql`insert into branches (id, user_id, name, kind, address, phone, pix, active)
       values (${id}, ${context.userId}, ${name}, ${"filial"}, ${(data.address ?? "").trim().slice(0, 200)}, ${(data.phone ?? "").trim().slice(0, 20)}, ${(data.pix ?? "").trim().slice(0, 80)}, ${true})`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });
 
 export const saveBranchFn = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
+  .middleware([academyMiddleware])
   .validator((d: { id: string; name: string; address?: string; phone?: string; pix?: string; active?: boolean }) => d)
   .handler(async ({ context, data }) => {
+    if (context.isStaff) throw new Error("Só o dono altera filial.");
     const sql = await getSql();
     const rows = await sql<{ id: string; kind: string }>`
       select id, kind from branches where id = ${data.id} and user_id = ${context.userId}
@@ -1582,5 +1697,5 @@ export const saveBranchFn = createServerFn({ method: "POST" })
     const active = rows[0].kind === "matriz" ? true : data.active !== false;
     await sql`update branches set name = ${name}, address = ${(data.address ?? "").trim().slice(0, 200)}, phone = ${(data.phone ?? "").trim().slice(0, 20)}, pix = ${(data.pix ?? "").trim().slice(0, 80)}, active = ${active}
       where id = ${data.id} and user_id = ${context.userId}`;
-    return snapshot(context.userId);
+    return snapshot(context.userId, context.sessionUserId);
   });

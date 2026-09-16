@@ -185,3 +185,8 @@ export function instanceNameFor(userId: string) {
   if (!userId) throw new Error("Academia não identificada.");
   return `ts${createHash("sha256").update(userId).digest("hex").slice(0, 40)}`;
 }
+
+export function instanceNameForBranch(ownerUserId: string, branchId: string) {
+  if (!ownerUserId || !branchId) throw new Error("Unidade não identificada.");
+  return `tsb${createHash("sha256").update(`${ownerUserId}|${branchId}`).digest("hex").slice(0, 40)}`;
+}

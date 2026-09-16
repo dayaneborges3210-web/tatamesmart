@@ -39,9 +39,16 @@ function ConfigBody() {
     waOwner,
     saveSchool,
     loading,
+    role,
+    lockedBranchId,
+    branchId,
+    branches,
   } = useDojo();
   const user = useCurrentUser();
+  const staff = role === "staff";
   const [tab, setTab] = useState<"academia" | "seguranca" | "filiais">("academia");
+  const unitId = lockedBranchId || branchId;
+  const unitName = branches.find((b) => b.id === unitId)?.name || "esta unidade";
   const [name, setName] = useState(school);
   const [mark, setMark] = useState(logo);
   const [phone, setPhone] = useState(ownerPhone);
@@ -75,7 +82,7 @@ function ConfigBody() {
     if (!waReady || loading) return;
     let stop = false;
     setBusy(true);
-    void waQrClient()
+    void waQrClient({ branchId: unitId })
       .then((r) => {
         if (stop) return;
         setWaLink(r.state === "open" ? "open" : "connecting");
@@ -91,12 +98,12 @@ function ConfigBody() {
     return () => {
       stop = true;
     };
-  }, [waReady, loading]);
+  }, [waReady, loading, unitId]);
 
   useEffect(() => {
     if (!waReady || waLink === "open") return;
     const t = window.setInterval(() => {
-      void waStateClient()
+      void waStateClient(unitId)
         .then((s) => {
           setWaLink(s);
           if (s === "open") setApiInfo("WhatsApp conectado.");
@@ -104,7 +111,7 @@ function ConfigBody() {
         .catch(() => {});
     }, 4000);
     return () => window.clearInterval(t);
-  }, [waReady, waLink]);
+  }, [waReady, waLink, unitId]);
 
   function persist(next: {
     waUrl?: string;
@@ -152,6 +159,7 @@ function ConfigBody() {
         >
           Segurança e login
         </button>
+        {!staff ? (
         <button
           type="button"
           className={cn(
@@ -162,6 +170,7 @@ function ConfigBody() {
         >
           Filiais
         </button>
+        ) : null}
       </div>
 
       {tab === "seguranca" ? (
@@ -318,9 +327,9 @@ function ConfigBody() {
       </section>
 
       <section id="whatsapp" className="mt-10 max-w-xl scroll-mt-8">
-        <h2 className="text-sm font-medium">WhatsApp da academia</h2>
+        <h2 className="text-sm font-medium">WhatsApp de {unitName}</h2>
         <p className="mt-1 text-sm text-muted">
-          Cada academia lê o próprio QR no celular do dono. As mensalidades saem deste número, não do Metalcore.
+          Cada filial lê o próprio QR no celular do professor ou do dono daquela unidade. As mensalidades desta filial saem deste número.
         </p>
         {showApiForm ? (
           <form
@@ -360,7 +369,7 @@ function ConfigBody() {
         {waReady ? (
           <div className="mt-4 rounded-lg border border-border bg-surface p-5">
             <p className="text-sm font-medium">
-              {waLink === "open" ? "Conectado" : busy ? "Gerando QR…" : "Leia o QR com o celular desta academia"}
+              {waLink === "open" ? "Conectado" : busy ? "Gerando QR…" : `Leia o QR com o celular de ${unitName}`}
             </p>
             {apiInfo ? (
               <p className={`mt-2 text-sm ${/conectado|salva|enviada|gerado/i.test(apiInfo) ? "text-success" : "text-danger"}`}>
@@ -383,7 +392,7 @@ function ConfigBody() {
                   const override = apiToken.trim()
                     ? { url: apiUrl || "https://whatsapp.metalcoreerp.com.br", token: apiToken.trim() }
                     : undefined;
-                  void waQrClient(override)
+                  void waQrClient(override ? { ...override, branchId: unitId } : { branchId: unitId })
                     .then((r) => {
                       setWaLink(r.state === "open" ? "open" : "connecting");
                       setQr(r.qr);
@@ -407,8 +416,9 @@ function ConfigBody() {
                         url: apiUrl || "https://whatsapp.metalcoreerp.com.br",
                         token: apiToken.trim(),
                         to: phone,
+                        branchId: unitId,
                       })
-                    : waTestClient())
+                    : waTestClient({ branchId: unitId }))
                     .then(() => setApiInfo("Teste enviado. Olhe o WhatsApp do dono."))
                     .catch((err: unknown) => setApiInfo(err instanceof Error ? err.message : "Falha no teste."))
                     .finally(() => setBusy(false));

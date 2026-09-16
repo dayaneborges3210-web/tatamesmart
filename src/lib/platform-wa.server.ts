@@ -1,5 +1,6 @@
 import { getSql } from "@/lib/db";
-import { createEvolutionInstance, evolutionState, instanceNameFor, normalizeEvolutionUrl } from "@/lib/whatsapp";
+import { academyOf } from "@/lib/academy-actor";
+import { createEvolutionInstance, evolutionState, instanceNameFor, instanceNameForBranch, normalizeEvolutionUrl } from "@/lib/whatsapp";
 import { randomBytes } from "node:crypto";
 import { isMaeEmail, PLATFORM_OWNER_EMAIL } from "@/lib/site";
 
@@ -100,7 +101,113 @@ export function waReadyOf(p: PlatformWa) {
   return Boolean(p.url && p.token);
 }
 
-export async function ensureSchoolWa(userId: string) {
+export async function ensureBranchWa(ownerUserId: string, branchId: string) {
+  const platform = await ensurePlatformWa();
+  if (!platform.url || !platform.token) {
+    throw new Error("A TatameSmart ainda não ligou a API do WhatsApp.");
+  }
+  const sql = await getSql();
+  await sql.query(`
+    create table if not exists wa_school_instances (
+      user_id text primary key,
+      instance_name text not null unique,
+      instance_token text not null,
+      provisioned boolean not null default false,
+      created_at timestamptz not null default now()
+    )
+  `);
+  await sql.query(`
+    create table if not exists wa_branch_instances (
+      branch_id text primary key,
+      owner_user_id text not null,
+      instance_name text not null unique,
+      instance_token text not null,
+      provisioned boolean not null default false,
+      created_at timestamptz not null default now()
+    )
+  `);
+  const branches = await sql<{ id: string; kind: string }>`
+    select id, kind from branches where user_id = ${ownerUserId} and id = ${branchId} limit 1
+  `;
+  if (!branches[0]) throw new Error("Unidade não encontrada.");
+
+  const existing = await sql<{ instance_name: string; instance_token: string; provisioned: boolean }>`
+    select instance_name, instance_token, provisioned from wa_branch_instances where branch_id = ${branchId}
+  `;
+  if (!existing.length) {
+    let instanceName = instanceNameForBranch(ownerUserId, branchId);
+    let instanceToken = randomBytes(32).toString("hex");
+    let provisioned = false;
+    if (branches[0].kind === "matriz") {
+      const school = await sql<{ instance_name: string; instance_token: string; provisioned: boolean }>`
+        select instance_name, instance_token, provisioned from wa_school_instances where user_id = ${ownerUserId}
+      `;
+      if (school[0] && !/^metalcore$/i.test(school[0].instance_name) && !/^autocore$/i.test(school[0].instance_name)) {
+        instanceName = school[0].instance_name;
+        instanceToken = school[0].instance_token;
+        provisioned = Boolean(school[0].provisioned);
+      }
+    }
+    await sql`insert into wa_branch_instances (branch_id, owner_user_id, instance_name, instance_token, provisioned)
+      values (${branchId}, ${ownerUserId}, ${instanceName}, ${instanceToken}, ${provisioned})
+      on conflict (branch_id) do nothing`;
+  }
+
+  const rows = await sql<{ instance_name: string; instance_token: string; provisioned: boolean }>`
+    select instance_name, instance_token, provisioned from wa_branch_instances where branch_id = ${branchId}`;
+  const row = rows[0];
+  if (!row || row.instance_token === platform.token) throw new Error("Credencial individual indisponível.");
+  if (/^metalcore$/i.test(row.instance_name) || /^autocore$/i.test(row.instance_name)) {
+    throw new Error("Instância inválida. Cada unidade usa o próprio QR.");
+  }
+  const creds = { url: platform.url, instance: row.instance_name, token: row.instance_token };
+  if (!row.provisioned) {
+    try {
+      await createEvolutionInstance({
+        url: platform.url,
+        token: platform.token,
+        instance: creds.instance,
+        instanceToken: creds.token,
+      });
+    } catch (error) {
+      try {
+        await evolutionState(creds);
+      } catch {
+        throw error;
+      }
+    }
+    await evolutionState(creds);
+    await sql`update wa_branch_instances set provisioned = true where branch_id = ${branchId}`;
+    if (branches[0].kind === "matriz") {
+      await sql`insert into wa_school_instances (user_id, instance_name, instance_token, provisioned)
+        values (${ownerUserId}, ${creds.instance}, ${creds.token}, ${true})
+        on conflict (user_id) do update set instance_name = excluded.instance_name, instance_token = excluded.instance_token, provisioned = true`;
+      await sql`update schools set wa_phone_id = ${creds.instance}, wa_url = ${platform.url} where user_id = ${ownerUserId}`;
+    }
+  }
+  return creds;
+}
+
+export async function ensureSchoolWa(sessionUserId: string, branchId?: string) {
+  const actor = await academyOf(sessionUserId);
+  const sql = await getSql();
+  const branches = await sql<{ id: string; kind: string }>`
+    select id, kind from branches where user_id = ${actor.ownerId} order by kind, name
+  `;
+  const wanted =
+    actor.lockedBranchId ||
+    (branchId && branches.some((b) => b.id === branchId) ? branchId : "") ||
+    branches.find((b) => b.kind === "matriz")?.id ||
+    branches[0]?.id ||
+    "";
+  if (!wanted) {
+    const fallback = await ensureSchoolWaLegacy(actor.ownerId);
+    return fallback;
+  }
+  return ensureBranchWa(actor.ownerId, wanted);
+}
+
+async function ensureSchoolWaLegacy(userId: string) {
   const platform = await ensurePlatformWa();
   if (!platform.url || !platform.token) {
     throw new Error("A TatameSmart ainda não ligou a API do WhatsApp.");

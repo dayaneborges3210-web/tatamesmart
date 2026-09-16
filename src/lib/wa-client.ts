@@ -3,19 +3,20 @@ import { browserQr, browserSendText, browserState } from "@/lib/evo-browser";
 
 type Creds = { url: string; instance: string; token: string; ownerPhone: string };
 
-async function loadCreds(): Promise<Creds> {
+async function loadCreds(branchId?: string): Promise<Creds> {
   const headers: Record<string, string> = {};
   const token = getBearerToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch("/api/wa-creds", { credentials: "include", cache: "no-store", headers });
+  const qs = branchId ? `?branch=${encodeURIComponent(branchId)}` : "";
+  const res = await fetch(`/api/wa-creds${qs}`, { credentials: "include", cache: "no-store", headers });
   const json = (await res.json().catch(() => ({}))) as Creds & { message?: string };
   if (!res.ok) throw new Error(json.message || "Cole o token no campo Token e clique Enviar teste.");
   if (!json.url || !json.token || !json.instance) throw new Error("Cole o token no campo Token e clique Enviar teste.");
   return json;
 }
 
-export async function waQrClient(override?: { url?: string; instance?: string; token?: string }) {
-  const saved = await loadCreds();
+export async function waQrClient(override?: { url?: string; instance?: string; token?: string; branchId?: string }) {
+  const saved = await loadCreds(override?.branchId);
   const url = override?.url || saved?.url || "";
   const instance = override?.instance || saved?.instance || "";
   const token = override?.token || saved?.token || "";
@@ -23,8 +24,8 @@ export async function waQrClient(override?: { url?: string; instance?: string; t
   return browserQr({ url, token, instance });
 }
 
-export async function waTestClient(override?: { url?: string; instance?: string; token?: string; to?: string }) {
-  const saved = await loadCreds();
+export async function waTestClient(override?: { url?: string; instance?: string; token?: string; to?: string; branchId?: string }) {
+  const saved = await loadCreds(override?.branchId);
   const url = override?.url || saved?.url || "";
   const instance = override?.instance || saved?.instance || "";
   const token = override?.token || saved?.token || "";
@@ -40,6 +41,6 @@ export async function waTestClient(override?: { url?: string; instance?: string;
   });
 }
 
-export async function waStateClient() {
-  return browserState(await loadCreds());
+export async function waStateClient(branchId?: string) {
+  return browserState(await loadCreds(branchId));
 }

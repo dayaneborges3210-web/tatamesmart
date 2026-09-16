@@ -183,7 +183,7 @@ function Login() {
         ) : null}
 
         {mode !== "restaurar" ? (
-          <p className="my-5 rounded-sm bg-bg px-3 py-2 text-center text-xs text-muted">ou e-mail da escola</p>
+          <p className="my-5 rounded-sm bg-bg px-3 py-2 text-center text-xs text-muted">ou e-mail da escola ou do professor da filial</p>
         ) : (
           <div className="mt-6" />
         )}
@@ -194,7 +194,7 @@ function Login() {
               <Input value={school} onChange={(e) => setSchool(e.target.value)} required />
             </Field>
           ) : null}
-          <Field label="E-mail">
+          <Field label="E-mail da academia ou do professor">
             <Input
               type="email"
               value={email}
