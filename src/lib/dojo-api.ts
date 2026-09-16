@@ -19,7 +19,6 @@ import type {
 import { clampDegree, clampDueDay, dueDateInMonth, isBelt, isModality, nextDueFromDay, parseDocs } from "@/lib/dojo-types";
 import { alarmDue, formatAlarm } from "@/lib/alarms";
 import { DEMO_SCHOOL, isDemoEmail } from "@/lib/demo";
-import { ensureMaeAccount } from "@/lib/mae.server";
 import { isMaeEmail } from "@/lib/site";
 
 function asDate(v: unknown) {
@@ -29,24 +28,33 @@ function asDate(v: unknown) {
 }
 
 async function ensureAcademyExtras() {
-  const sql = await getSql();
-  await sql.query(`
-    create table if not exists plans (
-      id text primary key,
-      user_id text not null,
-      name text not null,
-      duration_months int not null default 1,
-      billing text not null default 'mensal',
-      amount int not null default 0,
-      weekly_limit int not null default 0,
-      due_day int not null default 10
-    )
-  `);
-  await sql.query(`alter table students add column if not exists degree integer not null default 0`);
-  await sql.query(`alter table students add column if not exists birth date`);
-  await sql.query(`alter table students add column if not exists plan_id text not null default ''`);
-  await sql.query(`alter table students add column if not exists due_day int not null default 10`);
-  await sql.query(`alter table students add column if not exists docs text not null default ''`);
+  const g = globalThis as typeof globalThis & { __academyExtras__?: Promise<void> };
+  if (!g.__academyExtras__) {
+    g.__academyExtras__ = (async () => {
+      const sql = await getSql();
+      await sql.query(`
+        create table if not exists plans (
+          id text primary key,
+          user_id text not null,
+          name text not null,
+          duration_months int not null default 1,
+          billing text not null default 'mensal',
+          amount int not null default 0,
+          weekly_limit int not null default 0,
+          due_day int not null default 10
+        )
+      `);
+      await sql.query(`alter table students add column if not exists degree integer not null default 0`);
+      await sql.query(`alter table students add column if not exists birth date`);
+      await sql.query(`alter table students add column if not exists plan_id text not null default ''`);
+      await sql.query(`alter table students add column if not exists due_day int not null default 10`);
+      await sql.query(`alter table students add column if not exists docs text not null default ''`);
+    })().catch((err) => {
+      g.__academyExtras__ = undefined;
+      throw err;
+    });
+  }
+  await g.__academyExtras__;
 }
 
 async function snapshot(userId: string): Promise<DojoSnapshot> {
@@ -655,75 +663,41 @@ async function wipeDemoSeedFromRealSchool(userId: string) {
 export const loadDojo = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    try {
-      await ensureMaeAccount();
-    } catch (err) {
-      console.error("[mae] ensure", err);
-    }
     const sql = await getSql();
     const users = await sql<{ name: string | null; email: string | null }>`
       select name, email from "user" where id = ${context.userId}
     `;
     const email = users[0]?.email ?? "";
-    if (isMaeEmail(email)) {
-      const foundMae = await sql<{ user_id: string }>`select user_id from schools where user_id = ${context.userId}`;
-      if (!foundMae.length) {
-        await seedIfNeeded(context.userId, "TatameSmart", false);
-      }
-      return snapshot(context.userId);
-    }
-    const access = await sql<{ access_status: string | null }>`
-      select access_status from schools where user_id = ${context.userId}
-    `.catch(() => [] as { access_status: string | null }[]);
-    if (access[0]?.access_status === "blocked") {
-      return snapshot(context.userId);
-    }
-    const found = await sql<{ name: string }>`select name from schools where user_id = ${context.userId}`;
+    const found = await sql<{ name: string }>`select name from schools where user_id = ${context.userId}`.catch(
+      () => [] as { name: string }[],
+    );
     const demo = isDemoEmail(email) || users[0]?.name === DEMO_SCHOOL || found[0]?.name === DEMO_SCHOOL;
-    if (!found.length || demo) {
-      await seedIfNeeded(context.userId, demo ? DEMO_SCHOOL : users[0]?.name?.trim() || "Minha academia", demo);
+
+    if (isMaeEmail(email)) {
+      if (!found.length) await seedIfNeeded(context.userId, "TatameSmart", false);
+      return snapshot(context.userId);
     }
-    if (demo) {
+
+    if (!found.length) {
+      await seedIfNeeded(context.userId, demo ? DEMO_SCHOOL : users[0]?.name?.trim() || "Minha academia", demo);
+    } else if (demo) {
       const roster = await sql<{ n: number }>`select count(*)::int as n from students where user_id = ${context.userId}`;
       if (Number(roster[0]?.n ?? 0) === 0) {
         await seedIfNeeded(context.userId, DEMO_SCHOOL, true);
-      }
-      try {
-        await seedOpsIfNeeded(context.userId);
-        await seedCatalogIfNeeded(context.userId);
-        await fillStudentFichaIfNeeded(context.userId);
-        await seedAttendanceIfNeeded(context.userId);
-        await fillShopIfNeeded(context.userId);
-        await seedChampionshipsIfNeeded(context.userId);
-        await fillClassEndIfNeeded(context.userId);
-      } catch (err) {
-        console.error("[dojo] extra seed", err);
-      }
-    } else {
-      try {
-        await wipeDemoSeedFromRealSchool(context.userId);
-        await fillClassEndIfNeeded(context.userId);
-      } catch (err) {
-        console.error("[dojo] wipe seed", err);
+        try {
+          await seedOpsIfNeeded(context.userId);
+          await seedCatalogIfNeeded(context.userId);
+          await fillStudentFichaIfNeeded(context.userId);
+          await seedAttendanceIfNeeded(context.userId);
+          await fillShopIfNeeded(context.userId);
+          await seedChampionshipsIfNeeded(context.userId);
+          await fillClassEndIfNeeded(context.userId);
+        } catch (err) {
+          console.error("[dojo] extra seed", err);
+        }
       }
     }
-    if (!demo) {
-      try {
-        await ensureSchoolWa(context.userId);
-      } catch (err) {
-        console.error("[wa] instance", err);
-      }
-    }
-    const snap = await snapshot(context.userId);
-    if (snap.waReady && snap.waAuto) {
-      try {
-        await dispatchToday(context.userId);
-        return snapshot(context.userId);
-      } catch (err) {
-        console.error("[wa] auto", err);
-      }
-    }
-    return snap;
+    return snapshot(context.userId);
   });
 
 async function dispatchToday(userId: string) {
@@ -781,9 +755,11 @@ async function dispatchToday(userId: string) {
       sent += 1;
     } catch (err) {
       failed += 1;
-      errors.push(`${student.name}: ${err instanceof Error ? err.message : "falhou"}`);
+      const msg = err instanceof Error ? err.message : "falhou";
+      errors.push(`${student.name}: ${msg}`);
       await sql`update wa_dispatch_claims set status = 'uncertain', updated_at = now()
         where user_id = ${userId} and kind = 'invoice' and item_id = ${inv.id} and dispatch_day = ${today}`;
+      if (/tempo de resposta|alcançar a Evolution/i.test(msg)) break;
     }
   }
   return { sent, failed, errors: errors.slice(0, 6) };

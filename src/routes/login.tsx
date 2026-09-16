@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { GROK_PROVIDERS, authClient, authEnabled, keepSessionToken, signIn } from "@/lib/auth/client";
+import { GROK_PROVIDERS, authEnabled, keepSessionToken, signIn } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button, Field, Input, PasswordInput } from "@/components/ui";
 import { keepPreviewSession, loginErrorMessage } from "@/lib/preview-session";
@@ -53,15 +53,7 @@ function Login() {
   async function finishLogin(token: string) {
     keepSessionToken(token);
     keepPreviewSession(token);
-    try {
-      await authClient.getSession({
-        fetchOptions: { headers: { Authorization: `Bearer ${token}` } },
-      });
-      authClient.$store.notify("$sessionSignal");
-    } catch {
-      /* hard reload below */
-    }
-    window.location.assign("/");
+    window.location.replace("/");
   }
 
   async function enterWithEmail() {
@@ -137,10 +129,11 @@ function Login() {
   return (
     <main className="relative min-h-dvh overflow-y-auto bg-bg text-fg">
       <img
-        src="/login-hero.png"
+        src="/login-hero.jpg"
         alt="Atletas de jiu-jitsu, muay thai, karatê e capoeira"
         className="pointer-events-none absolute inset-0 size-full object-cover opacity-70"
         style={{ objectPosition: "68% 88%" }}
+        decoding="async"
       />
       <div className="relative flex min-h-dvh flex-col md:flex-row">
         <div className="order-1 min-h-80 flex-1" />

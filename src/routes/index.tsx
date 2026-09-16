@@ -34,10 +34,10 @@ function Home() {
       } catch {
         /* older client */
       }
-      if (n >= 16) setHold(false);
+      if (n >= 6) setHold(false);
     };
     tick();
-    const t = window.setInterval(tick, 250);
+    const t = window.setInterval(tick, 120);
     return () => window.clearInterval(t);
   }, [user]);
 

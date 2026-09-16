@@ -58,7 +58,7 @@ function evoRaw(url: string, init?: RequestInit): Promise<Response> {
       },
     );
     req.on("error", reject);
-    req.setTimeout(15000, () => req.destroy(new Error("Evolution: tempo de resposta esgotado.")));
+    req.setTimeout(8000, () => req.destroy(new Error("Evolution: tempo de resposta esgotado.")));
     if (typeof init?.body === "string") req.write(init.body);
     req.end();
   });

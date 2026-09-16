@@ -36,6 +36,7 @@ import {
 } from "@/lib/dojo-api";
 import { alarmDue, enableNotifications, fireNotification, formatAlarm, ownerWaLink } from "@/lib/alarms";
 import { DEFAULT_CHARGE_TEXTS } from "@/lib/cobranca";
+import { loadFontFace } from "@/lib/fonts";
 import type { DojoSnapshot, Modality, ReminderSend, Student } from "@/lib/dojo-types";
 
 export type { Belt, ClassGroup, Invoice, Modality, Student } from "@/lib/dojo-types";
@@ -210,10 +211,20 @@ export function DojoProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
+    if (loading || !data.waReady || !data.waAuto) return;
+    void dispatchTodayFn()
+      .then((res) => {
+        if (res && typeof res === "object" && "snapshot" in res) apply((res as { snapshot: unknown }).snapshot);
+      })
+      .catch(() => undefined);
+  }, [loading, data.waReady, data.waAuto]);
+
+  useEffect(() => {
     if (!data) return;
     const root = document.documentElement;
     root.dataset.brand = data.theme || "aco";
     root.dataset.font = data.font || "plex";
+    loadFontFace(data.font || "plex");
     const scale = data.typeScale || 100;
     root.style.setProperty("--type-scale", String(scale / 100));
     root.style.setProperty("font-size", `${(16 * scale) / 100}px`);
