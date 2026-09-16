@@ -32,12 +32,16 @@ export function MensalidadesPage() {
 }
 
 function CobrancaBody() {
-  const { invoices, students, school, pix, reminders, markPaid, markReminderSent, chargeTexts, waReady, waAuto, dispatchToday } =
+  const { invoices, students, school, pix, reminders, markPaid, markReminderSent, chargeTexts, waReady, waAuto, dispatchToday, branches } =
     useDojo();
   const today = todayISO();
   const [preview, setPreview] = useState<ChargePhase>("inicio");
   const [sending, setSending] = useState(false);
   const [sendInfo, setSendInfo] = useState("");
+  function pixOf(studentId?: string) {
+    const st = students.find((s) => s.id === studentId);
+    return branches.find((b) => b.id === st?.branchId)?.pix || pix;
+  }
 
   const rows = useMemo(() => {
     return invoices
@@ -59,7 +63,7 @@ function CobrancaBody() {
   const sampleInv = invoices[0];
   const sampleMsg =
     sample && sampleInv
-      ? buildMessage({ school, pix, student: sample, invoice: { ...sampleInv, due: sampleInv.due }, phase: preview, templates: chargeTexts })
+      ? buildMessage({ school, pix: pixOf(sample.id), student: sample, invoice: { ...sampleInv, due: sampleInv.due }, phase: preview, templates: chargeTexts })
       : "";
 
   return (
@@ -131,7 +135,7 @@ function CobrancaBody() {
               const student = row.student;
               const text = buildMessage({
                 school,
-                pix,
+                pix: pixOf(student.id),
                 student,
                 invoice: row.inv,
                 phase: row.phase,
@@ -221,7 +225,7 @@ function CobrancaBody() {
                           row.student.phone,
                           buildMessage({
                             school,
-                            pix,
+                            pix: pixOf(row.student.id),
                             student: row.student,
                             invoice: row.inv,
                             phase: row.phase,
@@ -258,7 +262,7 @@ function CobrancaBody() {
         <pre className="mt-4 whitespace-pre-wrap rounded-md border border-border bg-bg p-4 font-sans text-sm leading-relaxed text-fg">
           {sampleMsg}
         </pre>
-        <p className="mt-3 text-xs text-subtle">PIX cadastrado da escola: {pix}</p>
+        <p className="mt-3 text-xs text-subtle">PIX desta unidade: {pix || "cadastre o PIX da filial em Configurações → Filiais"}</p>
       </section>
     </>
   );

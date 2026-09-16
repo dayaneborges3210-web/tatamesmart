@@ -10,6 +10,7 @@ export function activeBranches(branches: Branch[]) {
 
 export function scopeSnapshot(snap: DojoSnapshot, branchId: string): DojoSnapshot {
   if (!branchId) return snap;
+  const unit = snap.branches.find((b) => b.id === branchId);
   const students = snap.students.filter((s) => s.branchId === branchId);
   const ids = new Set(students.map((s) => s.id));
   const classes = snap.classes.filter((c) => c.branchId === branchId);
@@ -18,9 +19,11 @@ export function scopeSnapshot(snap: DojoSnapshot, branchId: string): DojoSnapsho
   const stock = snap.stock.filter((s) => s.branchId === branchId);
   return {
     ...snap,
+    pix: unit?.pix || snap.pix,
     students,
     classes,
-    invoices: snap.invoices.filter((i) => ids.has(i.studentId)),
+    plans: snap.plans.filter((p) => p.branchId === branchId),
+    invoices: snap.invoices.filter((i) => i.branchId === branchId || (!i.branchId && ids.has(i.studentId))),
     attendance: snap.attendance.filter((a) => ids.has(a.studentId) || classIds.has(a.classId)),
     payables: snap.payables.filter((p) => p.branchId === branchId),
     agenda: snap.agenda.filter((a) => a.branchId === branchId),

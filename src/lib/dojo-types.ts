@@ -80,6 +80,7 @@ export type Plan = {
   amount: number;
   weeklyLimit: number;
   dueDay: number;
+  branchId: string;
 };
 
 export const STUDENT_DOCS = [
@@ -139,6 +140,7 @@ export type Invoice = {
   amount: number;
   status: "aberta" | "paga" | "atrasada";
   due: string;
+  branchId: string;
 };
 
 export type Attendance = {
@@ -232,6 +234,7 @@ export type Branch = {
   kind: "matriz" | "filial";
   address: string;
   phone: string;
+  pix: string;
   active: boolean;
 };
 

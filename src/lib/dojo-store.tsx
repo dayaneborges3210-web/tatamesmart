@@ -78,8 +78,8 @@ type Store = DojoSnapshot & {
   loading: boolean;
   branchId: string;
   setBranch: (id: string) => void;
-  addBranch: (d: { name: string; address?: string; phone?: string }) => Promise<void>;
-  saveBranch: (d: { id: string; name: string; address?: string; phone?: string; active?: boolean }) => Promise<void>;
+  addBranch: (d: { name: string; address?: string; phone?: string; pix?: string }) => Promise<void>;
+  saveBranch: (d: { id: string; name: string; address?: string; phone?: string; pix?: string; active?: boolean }) => Promise<void>;
   addStudent: (s: Omit<Student, "id" | "joined">) => Promise<void>;
   saveStudent: (d: {
     id: string;
@@ -102,7 +102,7 @@ type Store = DojoSnapshot & {
     branchId?: string;
   }) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
-  addPlan: (d: { name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number }) => Promise<void>;
+  addPlan: (d: { name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number; branchId?: string }) => Promise<void>;
   savePlan: (d: { id: string; name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number }) => Promise<void>;
   deletePlan: (id: string) => Promise<void>;
   toggleAttendance: (studentId: string, classId: string, date: string, present: boolean) => Promise<void>;
@@ -333,7 +333,7 @@ export function DojoProvider({ children }: { children: ReactNode }) {
       apply(await deleteStudentFn({ data: { id } }));
     },
     addPlan: async (d) => {
-      apply(await addPlanFn({ data: d }));
+      apply(await addPlanFn({ data: { ...d, branchId: d.branchId || assignedBranch } }));
     },
     savePlan: async (d) => {
       apply(await savePlanFn({ data: d }));

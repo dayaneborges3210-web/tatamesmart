@@ -68,10 +68,16 @@ async function ensureBranches(userId: string, schoolName: string): Promise<Branc
       kind text not null default 'filial',
       address text not null default '',
       phone text not null default '',
+      pix text not null default '',
       active boolean not null default true
     )
   `);
-  const tables = ["students", "classes", "staff", "stock_items", "payables", "agenda", "championships", "sales"];
+  try {
+    await sql.query(`alter table branches add column if not exists pix text not null default ''`);
+  } catch {
+    /* column already there */
+  }
+  const tables = ["students", "classes", "staff", "stock_items", "payables", "agenda", "championships", "sales", "plans", "invoices"];
   for (const table of tables) {
     await sql.query(`alter table ${table} add column if not exists branch_id text not null default ''`);
   }
@@ -81,13 +87,15 @@ async function ensureBranches(userId: string, schoolName: string): Promise<Branc
     kind: string;
     address: string;
     phone: string;
+    pix: string | null;
     active: boolean;
-  }>`select id, name, kind, address, phone, active from branches where user_id = ${userId} order by kind, name`;
+  }>`select id, name, kind, address, phone, pix, active from branches where user_id = ${userId} order by kind, name`;
   if (!rows.length) {
     const id = `${userId}:matriz`;
-    await sql`insert into branches (id, user_id, name, kind, address, phone, active)
-      values (${id}, ${userId}, ${"Matriz"}, ${"matriz"}, ${""}, ${""}, ${true})`;
-    rows = [{ id, name: "Matriz", kind: "matriz", address: "", phone: "", active: true }];
+    const schoolPix = await sql<{ pix: string | null }>`select pix from schools where user_id = ${userId}`;
+    await sql`insert into branches (id, user_id, name, kind, address, phone, pix, active)
+      values (${id}, ${userId}, ${"Matriz"}, ${"matriz"}, ${""}, ${""}, ${schoolPix[0]?.pix ?? ""}, ${true})`;
+    rows = [{ id, name: "Matriz", kind: "matriz", address: "", phone: "", pix: schoolPix[0]?.pix ?? "", active: true }];
   }
   const matriz = rows.find((r) => r.kind === "matriz") ?? rows[0];
   await sql`update students set branch_id = ${matriz.id} where user_id = ${userId} and branch_id = ${""}`;
@@ -98,6 +106,16 @@ async function ensureBranches(userId: string, schoolName: string): Promise<Branc
   await sql`update agenda set branch_id = ${matriz.id} where user_id = ${userId} and branch_id = ${""}`;
   await sql`update championships set branch_id = ${matriz.id} where user_id = ${userId} and branch_id = ${""}`;
   await sql`update sales set branch_id = ${matriz.id} where user_id = ${userId} and branch_id = ${""}`;
+  await sql`update plans set branch_id = ${matriz.id} where user_id = ${userId} and branch_id = ${""}`;
+  await sql`update invoices set branch_id = ${matriz.id} where user_id = ${userId} and branch_id = ${""}`;
+  if (!(matriz.pix ?? "").trim()) {
+    const schoolPix = await sql<{ pix: string | null }>`select pix from schools where user_id = ${userId}`;
+    const pix = (schoolPix[0]?.pix ?? "").trim();
+    if (pix) {
+      await sql`update branches set pix = ${pix} where id = ${matriz.id} and user_id = ${userId}`;
+      matriz.pix = pix;
+    }
+  }
   void schoolName;
   return rows.map((r) => ({
     id: r.id,
@@ -105,6 +123,7 @@ async function ensureBranches(userId: string, schoolName: string): Promise<Branc
     kind: r.kind === "matriz" ? "matriz" : "filial",
     address: r.address ?? "",
     phone: r.phone ?? "",
+    pix: (r.pix ?? "").trim(),
     active: Boolean(r.active),
   }));
 }
@@ -227,7 +246,8 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
     amount: number;
     status: string;
     due: unknown;
-  }>`select id, student_id, month, amount, status, due from invoices where user_id = ${userId}`;
+    branch_id: string | null;
+  }>`select id, student_id, month, amount, status, due, branch_id from invoices where user_id = ${userId}`;
   const attRows = await sql<{
     id: string;
     student_id: string;
@@ -313,10 +333,11 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
     amount: number;
     weekly_limit: number;
     due_day: number;
+    branch_id: string | null;
   }[] = [];
   try {
     planRows = await sql`
-      select id, name, duration_months, billing, amount, weekly_limit, due_day
+      select id, name, duration_months, billing, amount, weekly_limit, due_day, branch_id
       from plans where user_id = ${userId} order by name
     `;
   } catch {
@@ -331,6 +352,7 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
       amount: Number(row.amount),
       status: row.status as Invoice["status"],
       due: asDate(row.due),
+      branchId: row.branch_id || "",
     };
     return { ...inv, status: invoiceStatus(inv) };
   });
@@ -477,6 +499,7 @@ async function snapshot(userId: string): Promise<DojoSnapshot> {
       amount: Number(p.amount) || 0,
       weeklyLimit: Number(p.weekly_limit) || 0,
       dueDay: Number(p.due_day) || 10,
+      branchId: p.branch_id || "",
     })) as Plan[],
   };
 }
@@ -812,7 +835,7 @@ async function dispatchToday(userId: string) {
     }
     const text = buildMessage({
       school: snap.school,
-      pix: snap.pix,
+      pix: snap.branches.find((b) => b.id === student.branchId)?.pix || snap.pix,
       student,
       invoice: inv,
       phase,
@@ -991,8 +1014,10 @@ export const addStudentFn = createServerFn({ method: "POST" })
     await ensureAcademyExtras();
     const id = `${context.userId}:s${Date.now()}`;
     const t = todayISO();
+    const branchId = await resolveBranchId(context.userId, data.branchId, "");
     const plans = await sql<{ id: string; amount: number; due_day: number }>`
-      select id, amount, due_day from plans where user_id = ${context.userId} and id = ${data.planId ?? ""}
+      select id, amount, due_day from plans
+      where user_id = ${context.userId} and id = ${data.planId ?? ""} and (branch_id = ${branchId} or branch_id = ${""})
     `;
     const plan = plans[0];
     const dueDay = clampDueDay(data.dueDay || plan?.due_day || 10);
@@ -1008,11 +1033,10 @@ export const addStudentFn = createServerFn({ method: "POST" })
     const docs = parseDocs((data.docs ?? []).join(",")).join(",");
     const status = data.trial ? "trial" : "ativo";
     const planId = plan?.id ?? "";
-    const branchId = await resolveBranchId(context.userId, data.branchId, "");
     await sql`insert into students (id, user_id, name, phone, modality, belt, degree, class_id, status, joined, cpf, address, cep, has_health, health_note, birth, plan_id, due_day, docs, branch_id)
       values (${id}, ${context.userId}, ${data.name}, ${data.phone}, ${data.modality}, ${data.belt}, ${degree}, ${data.classId}, ${status}, ${t}, ${cpf}, ${address}, ${cep}, ${hasHealth}, ${healthNote}, ${birth}, ${planId}, ${dueDay}, ${docs}, ${branchId})`;
-    await sql`insert into invoices (id, user_id, student_id, month, amount, status, due)
-      values (${`inv-${id}`}, ${context.userId}, ${id}, ${due.slice(0, 7)}, ${amount}, ${"aberta"}, ${due})`;
+    await sql`insert into invoices (id, user_id, student_id, month, amount, status, due, branch_id)
+      values (${`inv-${id}`}, ${context.userId}, ${id}, ${due.slice(0, 7)}, ${amount}, ${"aberta"}, ${due}, ${branchId})`;
     return snapshot(context.userId);
   });
 
@@ -1107,7 +1131,7 @@ export const deleteStudentFn = createServerFn({ method: "POST" })
 export const addPlanFn = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
-    (d: { name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number }) => d,
+    (d: { name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number; branchId?: string }) => d,
   )
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1120,8 +1144,9 @@ export const addPlanFn = createServerFn({ method: "POST" })
     const weekly = Math.max(0, Math.round(data.weeklyLimit));
     const dueDay = clampDueDay(data.dueDay);
     const billing = data.billing === "unico" ? "unico" : "mensal";
-    await sql`insert into plans (id, user_id, name, duration_months, billing, amount, weekly_limit, due_day)
-      values (${id}, ${context.userId}, ${name}, ${duration}, ${billing}, ${amount}, ${weekly}, ${dueDay})`;
+    const branchId = await resolveBranchId(context.userId, data.branchId, "");
+    await sql`insert into plans (id, user_id, name, duration_months, billing, amount, weekly_limit, due_day, branch_id)
+      values (${id}, ${context.userId}, ${name}, ${duration}, ${billing}, ${amount}, ${weekly}, ${dueDay}, ${branchId})`;
     return snapshot(context.userId);
   });
 
@@ -1531,21 +1556,21 @@ export const saveChampionshipFn = createServerFn({ method: "POST" })
 
 export const addBranchFn = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((d: { name: string; address?: string; phone?: string }) => d)
+  .validator((d: { name: string; address?: string; phone?: string; pix?: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     await ensureBranches(context.userId, "");
     const name = data.name.trim().slice(0, 80);
     if (!name) throw new Error("Dê um nome à filial.");
     const id = `${context.userId}:b${Date.now()}`;
-    await sql`insert into branches (id, user_id, name, kind, address, phone, active)
-      values (${id}, ${context.userId}, ${name}, ${"filial"}, ${(data.address ?? "").trim().slice(0, 200)}, ${(data.phone ?? "").trim().slice(0, 20)}, ${true})`;
+    await sql`insert into branches (id, user_id, name, kind, address, phone, pix, active)
+      values (${id}, ${context.userId}, ${name}, ${"filial"}, ${(data.address ?? "").trim().slice(0, 200)}, ${(data.phone ?? "").trim().slice(0, 20)}, ${(data.pix ?? "").trim().slice(0, 80)}, ${true})`;
     return snapshot(context.userId);
   });
 
 export const saveBranchFn = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((d: { id: string; name: string; address?: string; phone?: string; active?: boolean }) => d)
+  .validator((d: { id: string; name: string; address?: string; phone?: string; pix?: string; active?: boolean }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const rows = await sql<{ id: string; kind: string }>`
@@ -1555,7 +1580,7 @@ export const saveBranchFn = createServerFn({ method: "POST" })
     const name = data.name.trim().slice(0, 80);
     if (!name) throw new Error("Dê um nome à unidade.");
     const active = rows[0].kind === "matriz" ? true : data.active !== false;
-    await sql`update branches set name = ${name}, address = ${(data.address ?? "").trim().slice(0, 200)}, phone = ${(data.phone ?? "").trim().slice(0, 20)}, active = ${active}
+    await sql`update branches set name = ${name}, address = ${(data.address ?? "").trim().slice(0, 200)}, phone = ${(data.phone ?? "").trim().slice(0, 20)}, pix = ${(data.pix ?? "").trim().slice(0, 80)}, active = ${active}
       where id = ${data.id} and user_id = ${context.userId}`;
     return snapshot(context.userId);
   });

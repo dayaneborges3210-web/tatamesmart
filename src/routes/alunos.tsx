@@ -396,7 +396,9 @@ function AlunosBody() {
                   }}
                 >
                   <option value="">Sem plano — valor padrão da modalidade</option>
-                  {plans.map((p) => (
+                  {plans
+                    .filter((p) => !unitId || p.branchId === unitId || !p.branchId)
+                    .map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} · {brl(p.amount)} · dia {p.dueDay}
                     </option>

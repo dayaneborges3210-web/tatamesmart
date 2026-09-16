@@ -553,18 +553,20 @@ function BranchesTab() {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
+  const [pix, setPix] = useState("");
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [editPix, setEditPix] = useState("");
 
   return (
     <section className="mt-8 max-w-xl">
       <h2 className="text-sm font-medium">Filiais</h2>
       <p className="mt-1 text-sm text-muted">
-        A matriz nasce com a academia. Cada filial tem alunos, turmas, estoque e caixa próprios. Planos e frases de cobrança são da rede.
+        Cada filial tem plano, PIX, mensalidade e caixa próprios. O aluno paga na unidade onde treina.
       </p>
       <div className="mt-4 grid gap-3">
         {branches.map((b) => (
@@ -575,7 +577,7 @@ function BranchesTab() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   setBusy(true);
-                  void saveBranch({ id: b.id, name: editName, address: editAddress, phone: editPhone, active: b.active })
+                  void saveBranch({ id: b.id, name: editName, address: editAddress, phone: editPhone, pix: editPix, active: b.active })
                     .then(() => {
                       setEditId(null);
                       setInfo("Unidade atualizada.");
@@ -591,6 +593,9 @@ function BranchesTab() {
                 </Field>
                 <Field label="Telefone">
                   <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
+                </Field>
+                <Field label="PIX desta unidade">
+                  <Input value={editPix} onChange={(e) => setEditPix(e.target.value)} placeholder="chave PIX" />
                 </Field>
                 <div className="flex gap-2">
                   <Button type="submit" disabled={busy}>
@@ -610,6 +615,7 @@ function BranchesTab() {
                 </p>
                 {b.address ? <p className="mt-1 text-sm text-muted">{b.address}</p> : null}
                 {b.phone ? <p className="text-sm text-muted">{b.phone}</p> : null}
+                <p className="mt-1 text-sm text-muted">PIX: {b.pix || "ainda sem chave"}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     type="button"
@@ -619,6 +625,7 @@ function BranchesTab() {
                       setEditName(b.name);
                       setEditAddress(b.address);
                       setEditPhone(b.phone);
+                      setEditPix(b.pix);
                     }}
                   >
                     Editar
@@ -630,7 +637,7 @@ function BranchesTab() {
                       disabled={busy}
                       onClick={() => {
                         setBusy(true);
-                        void saveBranch({ id: b.id, name: b.name, address: b.address, phone: b.phone, active: !b.active })
+                        void saveBranch({ id: b.id, name: b.name, address: b.address, phone: b.phone, pix: b.pix, active: !b.active })
                           .then(() => setInfo(b.active ? "Filial desativada." : "Filial reativada."))
                           .finally(() => setBusy(false));
                       }}
@@ -650,11 +657,12 @@ function BranchesTab() {
           e.preventDefault();
           setBusy(true);
           setInfo("");
-          void addBranch({ name, address, phone })
+          void addBranch({ name, address, phone, pix })
             .then(() => {
               setName("");
               setAddress("");
               setPhone("");
+              setPix("");
               setInfo("Filial criada. Troque a unidade no menu para cadastrar alunos nela.");
             })
             .catch((err: unknown) => setInfo(err instanceof Error ? err.message : "Não criou a filial."))
@@ -670,6 +678,9 @@ function BranchesTab() {
         </Field>
         <Field label="Telefone">
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </Field>
+        <Field label="PIX desta unidade">
+          <Input value={pix} onChange={(e) => setPix(e.target.value)} placeholder="chave PIX da filial" />
         </Field>
         {info ? <p className="text-sm text-muted">{info}</p> : null}
         <Button type="submit" disabled={busy || !name.trim()}>

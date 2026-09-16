@@ -30,7 +30,7 @@ export function PlanosPage() {
 }
 
 function PlanosBody() {
-  const { plans, students, addPlan, savePlan, deletePlan } = useDojo();
+  const { plans, students, branches, branchId, addPlan, savePlan, deletePlan } = useDojo();
   const [editing, setEditing] = useState<Plan | "new" | null>(null);
   const [name, setName] = useState("");
   const [duration, setDuration] = useState(1);
@@ -38,6 +38,7 @@ function PlanosBody() {
   const [amount, setAmount] = useState("180,00");
   const [weekly, setWeekly] = useState("0");
   const [dueDay, setDueDay] = useState(10);
+  const [unitId, setUnitId] = useState(branchId);
 
   const total = parseBRL(amount) * (billing === "mensal" ? duration : 1);
 
@@ -48,6 +49,7 @@ function PlanosBody() {
     setAmount("180,00");
     setWeekly("0");
     setDueDay(10);
+    setUnitId(branchId);
     setEditing(null);
   }
 
@@ -59,6 +61,7 @@ function PlanosBody() {
     setAmount(centsField(p.amount) || "0,00");
     setWeekly(String(p.weeklyLimit));
     setDueDay(p.dueDay);
+    setUnitId(p.branchId || branchId);
   }
 
   return (
@@ -67,9 +70,17 @@ function PlanosBody() {
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Cobrança</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Planos</h1>
-          <p className="mt-1 text-sm text-muted">O mestre cria o plano. Na matrícula o aluno entra nele — a mensalidade nasce sozinha.</p>
+          <p className="mt-1 text-sm text-muted">
+            Cada unidade tem os próprios planos, valores e vencimento. A mensalidade do aluno nasce do plano desta filial.
+          </p>
         </div>
-        <Button type="button" onClick={() => setEditing("new")}>
+        <Button
+          type="button"
+          onClick={() => {
+            setUnitId(branchId || branches.find((b) => b.kind === "matriz")?.id || branches[0]?.id || "");
+            setEditing("new");
+          }}
+        >
           Novo plano
         </Button>
       </div>
@@ -86,6 +97,11 @@ function PlanosBody() {
               <li key={p.id} className="rounded-lg border border-border bg-surface p-5">
                 <p className="text-xs text-muted">{p.billing === "unico" ? "Pagamento único" : "Cobrança mensal"}</p>
                 <h2 className="mt-1 text-lg font-semibold tracking-tight">{p.name}</h2>
+                {!branchId ? (
+                  <p className="mt-1 text-xs text-muted">
+                    {branches.find((b) => b.id === p.branchId)?.name || "Matriz"}
+                  </p>
+                ) : null}
                 <p className="mt-3 tabular text-xl">{brl(p.amount)}</p>
                 <p className="mt-1 text-sm text-muted">
                   {DURATIONS.find((d) => d.n === p.durationMonths)?.label ?? `${p.durationMonths} meses`} · vence dia {p.dueDay}
@@ -128,6 +144,7 @@ function PlanosBody() {
                 amount: parseBRL(amount),
                 weeklyLimit: Number(weekly) || 0,
                 dueDay,
+                branchId: unitId || branchId,
               };
               const run = editing === "new" ? addPlan(payload) : savePlan({ id: editing.id, ...payload });
               void run.then(reset);
@@ -135,6 +152,20 @@ function PlanosBody() {
           >
             <h2 className="text-lg font-semibold">{editing === "new" ? "Novo plano" : "Editar plano"}</h2>
             <div className="mt-4 grid gap-3">
+              <Field label="Unidade">
+                <select
+                  className="min-h-11 w-full rounded-sm border border-border bg-bg px-3 text-sm text-fg"
+                  value={unitId}
+                  onChange={(e) => setUnitId(e.target.value)}
+                  disabled={editing !== "new"}
+                >
+                  {branches.filter((b) => b.active).map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.kind === "matriz" ? `Matriz · ${b.name}` : b.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
               <Field label="Nome do plano">
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jiu-jitsu 2x na semana" required />
               </Field>
