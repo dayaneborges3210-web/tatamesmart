@@ -79,3 +79,24 @@ export const emailAuthFn = createServerFn({ method: "POST" })
     assertSameSiteRequest();
     return emailAuthCore(data);
   });
+
+export async function changePasswordCore(userId: string, current: string, next: string) {
+  const currentPassword = current.trim();
+  const nextPassword = next.trim();
+  if (currentPassword.length < 8) throw new Error("Informe a senha atual.");
+  if (nextPassword.length < 8) throw new Error("A senha nova precisa ter pelo menos 8 caracteres.");
+  if (currentPassword === nextPassword) throw new Error("A senha nova precisa ser diferente da atual.");
+  const sql = await getSql();
+  const acc = await sql<{ id: string; password: string | null }>`
+    select id, password from "account"
+    where "userId" = ${userId} and "providerId" = ${"credential"}
+    limit 1
+  `;
+  const hash = acc[0]?.password;
+  if (!acc[0] || !hash) throw new Error("Essa conta entra com Google. Não há senha para trocar.");
+  const ok = await verifyPassword({ hash, password: currentPassword });
+  if (!ok) throw new Error("A senha atual está incorreta.");
+  const hashed = await hashPassword(nextPassword);
+  await sql`update "account" set password = ${hashed}, "updatedAt" = now() where id = ${acc[0].id}`;
+  return { ok: true as const };
+}

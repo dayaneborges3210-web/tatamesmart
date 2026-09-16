@@ -9,6 +9,8 @@ import { useDojo } from "@/lib/dojo-store";
 import { FONTS, SCALE_MAX, SCALE_MIN, SCALE_STEP, clampScale } from "@/lib/fonts";
 import { printA4 } from "@/lib/thermal";
 import { waQrClient, waTestClient, waStateClient } from "@/lib/wa-client";
+import { changePasswordFn } from "@/lib/change-password";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
 
 export const Route = createFileRoute("/configuracoes")({ component: ConfigPage });
 
@@ -38,6 +40,8 @@ function ConfigBody() {
     saveSchool,
     loading,
   } = useDojo();
+  const user = useCurrentUser();
+  const [tab, setTab] = useState<"academia" | "seguranca">("academia");
   const [name, setName] = useState(school);
   const [mark, setMark] = useState(logo);
   const [phone, setPhone] = useState(ownerPhone);
@@ -127,7 +131,35 @@ function ConfigBody() {
     <>
       <p className="text-xs font-medium uppercase tracking-wide text-muted">Escola</p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Configurações</h1>
+      <div className="mt-6 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className={cn(
+            "min-h-11 rounded-md border px-4 text-sm",
+            tab === "academia" ? "border-fg bg-surface text-fg" : "border-border text-muted hover:text-fg",
+          )}
+          onClick={() => setTab("academia")}
+        >
+          Academia
+        </button>
+        <button
+          type="button"
+          className={cn(
+            "min-h-11 rounded-md border px-4 text-sm",
+            tab === "seguranca" ? "border-fg bg-surface text-fg" : "border-border text-muted hover:text-fg",
+          )}
+          onClick={() => setTab("seguranca")}
+        >
+          Segurança e login
+        </button>
+      </div>
 
+      {tab === "seguranca" ? (
+        <SecurityTab email={user?.primaryEmail || ""} />
+      ) : null}
+
+      {tab === "academia" ? (
+        <>
       <section className="mt-8 max-w-xl">
         <h2 className="text-sm font-medium">Identidade</h2>
         <div className="mt-4 grid gap-3">
@@ -422,6 +454,84 @@ function ConfigBody() {
           </Button>
         </div>
       </section>
+        </>
+      ) : null}
     </>
+  );
+}
+
+function SecurityTab({ email }: { email: string }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+
+  return (
+    <section className="mt-8 max-w-xl">
+      <h2 className="text-sm font-medium">Segurança e login</h2>
+      <p className="mt-1 text-sm text-muted">Troque a senha da academia sem sair do sistema.</p>
+      <form
+        className="mt-4 grid gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError("");
+          setInfo("");
+          if (next !== confirm) {
+            setError("As senhas novas não são iguais.");
+            return;
+          }
+          setBusy(true);
+          void changePasswordFn({ data: { current, next, confirm } })
+            .then(() => {
+              setCurrent("");
+              setNext("");
+              setConfirm("");
+              setInfo("Senha atualizada. Use a senha nova no próximo login.");
+            })
+            .catch((err: unknown) => {
+              setError(err instanceof Error ? err.message : "Não foi possível trocar a senha.");
+            })
+            .finally(() => setBusy(false));
+        }}
+      >
+        <Field label="E-mail de login">
+          <Input value={email} readOnly disabled />
+        </Field>
+        <Field label="Senha atual">
+          <PasswordInput
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            required
+            minLength={8}
+            autoComplete="current-password"
+          />
+        </Field>
+        <Field label="Senha nova">
+          <PasswordInput
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            required
+            minLength={8}
+            autoComplete="new-password"
+          />
+        </Field>
+        <Field label="Repita a senha nova">
+          <PasswordInput
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            required
+            minLength={8}
+            autoComplete="new-password"
+          />
+        </Field>
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        {info ? <p className="text-sm text-success">{info}</p> : null}
+        <Button type="submit" disabled={busy || !current || !next || !confirm}>
+          {busy ? "Salvando…" : "Salvar senha nova"}
+        </Button>
+      </form>
+    </section>
   );
 }
