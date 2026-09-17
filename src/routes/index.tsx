@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Landing } from "@/components/landing";
 import { Shell } from "@/components/shell";
 import { Badge } from "@/components/ui";
@@ -12,21 +12,12 @@ import { brl, classHours, daysUntil, formatDatePt, todayISO, weekdayPt } from "@
 export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
-  const { user, isPending } = useCurrentUserState();
-  const [hold, setHold] = useState(() => Boolean(typeof window !== "undefined" && getBearerToken()));
+  const { user } = useCurrentUserState();
 
   useEffect(() => {
-    if (user) {
-      setHold(false);
-      return;
-    }
-    if (!getBearerToken()) {
-      setHold(false);
-      return;
-    }
-    setHold(true);
+    if (user || !getBearerToken()) return;
     let n = 0;
-    const tick = () => {
+    const timer = window.setInterval(() => {
       n += 1;
       void authClient.getSession();
       try {
@@ -34,22 +25,19 @@ function Home() {
       } catch {
         /* older client */
       }
-      if (n >= 6) setHold(false);
-    };
-    tick();
-    const t = window.setInterval(tick, 120);
-    return () => window.clearInterval(t);
+      if (n >= 6) window.clearInterval(timer);
+    }, 120);
+    return () => window.clearInterval(timer);
   }, [user]);
 
-  if (isPending || (hold && !user)) {
-    return <div className="min-h-dvh bg-bg" />;
+  if (user) {
+    return (
+      <Shell>
+        <Dashboard />
+      </Shell>
+    );
   }
-  if (!user) return <Landing />;
-  return (
-    <Shell>
-      <Dashboard />
-    </Shell>
-  );
+  return <Landing />;
 }
 
 function Dashboard() {

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { GROK_PROVIDERS, authEnabled, keepSessionToken, signIn } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button, Field, Input, PasswordInput } from "@/components/ui";
@@ -28,8 +28,7 @@ async function postEntrar(payload: {
 }
 
 function Login() {
-  const { user, isPending } = useCurrentUserState();
-  const [ready, setReady] = useState(false);
+  const { user } = useCurrentUserState();
   const [mode, setMode] = useState<"entrar" | "criar" | "restaurar">("entrar");
   const [school, setSchool] = useState("");
   const [email, setEmail] = useState(import.meta.env.DEV ? "contato@smarttatame.com.br" : "");
@@ -42,13 +41,7 @@ function Login() {
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    const t = window.setTimeout(() => setReady(true), 800);
-    return () => window.clearTimeout(t);
-  }, []);
-
   if (user) return <Navigate to="/" />;
-  if (isPending && !ready) return <main className="min-h-dvh bg-bg" />;
 
   async function finishLogin(token: string) {
     keepSessionToken(token);

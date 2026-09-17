@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { authClient, authEnabled } from "./client";
 
 /** Normalized user shape used across the app, auth on or off. */
@@ -58,6 +59,17 @@ export function useCurrentUserState(): CurrentUserState {
   if (!authEnabled) return { user: DEV_USER, isPending: false };
   // eslint-disable-next-line react-hooks/rules-of-hooks -- authEnabled is constant for the app's lifetime
   const { data, isPending } = authClient.useSession();
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const [timedOut, setTimedOut] = useState(false);
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (!isPending) {
+      setTimedOut(false);
+      return;
+    }
+    const t = window.setTimeout(() => setTimedOut(true), 900);
+    return () => window.clearTimeout(t);
+  }, [isPending]);
   const user = data?.user;
   return {
     user: user
@@ -69,7 +81,7 @@ export function useCurrentUserState(): CurrentUserState {
           isDevFallback: false,
         }
       : null,
-    isPending,
+    isPending: isPending && !timedOut,
   };
 }
 
