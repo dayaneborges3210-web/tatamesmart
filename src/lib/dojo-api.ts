@@ -599,7 +599,7 @@ async function seedIfNeeded(userId: string, schoolName: string, withRoster = fal
   const phone = withRoster ? "62 99999-0001" : "";
 
   if (!existing.length) {
-    await sql`insert into schools (user_id, name, pix, owner_phone, wa_auto) values (${userId}, ${schoolName}, ${pix}, ${phone}, ${true})`;
+    await sql`insert into schools (user_id, name, pix, owner_phone, wa_auto, billing_plan) values (${userId}, ${schoolName}, ${pix}, ${phone}, ${true}, ${"trial"})`;
     try {
       const platform = await ensurePlatformWa();
       if (platform.url && platform.token) {

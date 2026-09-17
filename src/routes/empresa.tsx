@@ -2,15 +2,23 @@ import { Navigate, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Shell } from "@/components/shell";
 import { Badge, Button } from "@/components/ui";
-import { listAcademiesFn, setAccessFn, type AcademyRow } from "@/lib/mae-api";
+import {
+  listAcademiesFn,
+  setAccessFn,
+  setPlanFn,
+  type AcademyAccess,
+  type AcademyPlan,
+  type AcademyRow,
+} from "@/lib/mae-api";
 import { isMaeEmail } from "@/lib/site";
-import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { formatDatePt } from "@/lib/money";
 
 export const Route = createFileRoute("/empresa")({ component: EmpresaPage });
 
 export function EmpresaPage() {
-  const user = useCurrentUser();
+  const { user, isPending } = useCurrentUserState();
+  if (isPending) return <Shell><p className="text-sm text-muted">Carregando…</p></Shell>;
   if (!isMaeEmail(user?.primaryEmail)) {
     return <Navigate to="/" />;
   }
@@ -21,22 +29,33 @@ export function EmpresaPage() {
   );
 }
 
+function membership(row: AcademyRow) {
+  if (row.access === "blocked") return { label: "Bloqueada", tone: "danger" as const };
+  if (row.access === "vitalicio") return { label: "Vitalício", tone: "success" as const };
+  if (row.plan === "trial") return { label: "Trial", tone: "warning" as const };
+  if (row.plan === "promaster") return { label: "ProMaster", tone: "neutral" as const };
+  return { label: "Básico", tone: "neutral" as const };
+}
+
 function EmpresaBody() {
-  const [rows, setRows] = useState<AcademyRow[]>([]);
+  const [rows, setRows] = useState<AcademyRow[] | null>(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
 
   useEffect(() => {
     void listAcademiesFn()
       .then(setRows)
-      .catch((e: unknown) => setErr(e instanceof Error ? e.message : "Não carregou."));
+      .catch((e: unknown) => {
+        setRows([]);
+        setErr(e instanceof Error ? e.message : "Não carregou.");
+      });
   }, []);
 
-  async function setAccess(userId: string, access: AcademyRow["access"]) {
-    setBusy(userId + access);
+  async function run(key: string, work: () => Promise<AcademyRow[]>) {
+    setBusy(key);
     setErr("");
     try {
-      setRows(await setAccessFn({ data: { userId, access } }));
+      setRows(await work());
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Não salvou.");
     } finally {
@@ -44,63 +63,92 @@ function EmpresaBody() {
     }
   }
 
+  function setAccess(userId: string, access: AcademyAccess) {
+    void run(userId + access, () => setAccessFn({ data: { userId, access } }));
+  }
+
+  function setPlan(userId: string, plan: AcademyPlan) {
+    void run(userId + plan, () => setPlanFn({ data: { userId, plan } }));
+  }
+
   return (
     <>
       <p className="text-xs font-medium uppercase tracking-wide text-muted">Empresa mãe</p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Academias</h1>
       <p className="mt-1 text-sm text-muted">
-        Libera, bloqueia ou deixa vitalício pelo UID da academia que se cadastrou.
+        Toda academia que se cadastrou. Trial, Básico, ProMaster ou vitalício — e bloqueio pelo UID.
       </p>
       {err ? <p className="mt-3 text-sm text-danger">{err}</p> : null}
-      {rows.length === 0 ? (
-        <p className="mt-6 text-sm text-muted">Nenhuma academia cliente ainda.</p>
+      {rows === null ? (
+        <p className="mt-6 text-sm text-muted">Carregando academias…</p>
+      ) : rows.length === 0 ? (
+        <p className="mt-6 text-sm text-muted">Nenhuma academia cadastrada ainda.</p>
       ) : (
-        <ul className="mt-6 grid gap-2">
-          {rows.map((r) => (
-            <li key={r.userId} className="rounded-lg border border-border bg-surface p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-medium">{r.name || "Sem nome"}</p>
-                  <p className="mt-1 text-sm text-muted">{r.email}</p>
-                  <p className="mt-1 break-all font-mono text-xs text-subtle">UID {r.userId}</p>
-                  {r.createdAt ? (
-                    <p className="mt-1 text-xs text-subtle">Desde {formatDatePt(r.createdAt.slice(0, 10))}</p>
-                  ) : null}
-                </div>
-                <Badge tone={r.access === "blocked" ? "danger" : r.access === "vitalicio" ? "success" : "neutral"}>
-                  {r.access === "blocked" ? "Bloqueada" : r.access === "vitalicio" ? "Vitalício" : "Ativa"}
-                </Badge>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={!!busy}
-                  onClick={() => void setAccess(r.userId, "ok")}
-                >
-                  Liberar
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={!!busy}
-                  onClick={() => void setAccess(r.userId, "blocked")}
-                >
-                  Bloquear
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={!!busy}
-                  onClick={() => void setAccess(r.userId, "vitalicio")}
-                >
-                  Vitalício grátis
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-6 overflow-x-auto rounded-lg border border-border">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="border-b border-border bg-surface text-xs text-muted">
+              <tr>
+                <th className="px-4 py-3 font-medium">Academia</th>
+                <th className="px-4 py-3 font-medium">Plano</th>
+                <th className="px-4 py-3 font-medium">Desde</th>
+                <th className="px-4 py-3 font-medium">UID</th>
+                <th className="px-4 py-3 font-medium" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const m = membership(r);
+                return (
+                  <tr key={r.userId} className="border-b border-border last:border-0 align-top">
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{r.name}</p>
+                      <p className="mt-1 text-xs text-muted">{r.email}</p>
+                      {r.demo ? <p className="mt-1 text-xs text-subtle">Demonstração</p> : null}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge tone={m.tone}>{m.label}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-muted">
+                      {r.createdAt ? formatDatePt(r.createdAt.slice(0, 10)) : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="max-w-[11rem] break-all font-mono text-xs text-subtle">{r.userId}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="ghost" disabled={!!busy} onClick={() => setPlan(r.userId, "trial")}>
+                          Trial
+                        </Button>
+                        <Button type="button" variant="ghost" disabled={!!busy} onClick={() => setPlan(r.userId, "basico")}>
+                          Básico
+                        </Button>
+                        <Button type="button" variant="ghost" disabled={!!busy} onClick={() => setPlan(r.userId, "promaster")}>
+                          ProMaster
+                        </Button>
+                        <Button type="button" variant="ghost" disabled={!!busy} onClick={() => setAccess(r.userId, "vitalicio")}>
+                          Vitalício
+                        </Button>
+                        {r.access === "blocked" ? (
+                          <Button type="button" variant="ghost" disabled={!!busy} onClick={() => setAccess(r.userId, "ok")}>
+                            Liberar
+                          </Button>
+                        ) : (
+                          <Button type="button" variant="danger" disabled={!!busy} onClick={() => setAccess(r.userId, "blocked")}>
+                            Bloquear
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
+      {rows && rows.length > 0 ? (
+        <p className="mt-3 text-xs text-subtle">{rows.length} academia{rows.length === 1 ? "" : "s"} no sistema</p>
+      ) : null}
     </>
   );
 }

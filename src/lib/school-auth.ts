@@ -35,6 +35,8 @@ export async function emailAuthCore(data: {
   await ensureMaeAccount();
 
   const sql = await getSql();
+  await sql.query(`alter table schools add column if not exists access_status text not null default 'ok'`).catch(() => undefined);
+  await sql.query(`alter table schools add column if not exists billing_plan text not null default 'basico'`).catch(() => undefined);
   const users = await sql<{ id: string }>`
     select id from "user" where lower(email) = ${email} limit 1
   `;
@@ -52,6 +54,11 @@ export async function emailAuthCore(data: {
     await sql`
       insert into "account" (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
       values (${newId()}, ${userId}, ${"credential"}, ${userId}, ${hashed}, now(), now())
+    `;
+    await sql`
+      insert into schools (user_id, name, pix, owner_phone, wa_auto, access_status, billing_plan)
+      values (${userId}, ${name}, ${""}, ${""}, ${true}, ${"ok"}, ${"trial"})
+      on conflict (user_id) do nothing
     `;
     return { token: await openSession(userId) };
   }

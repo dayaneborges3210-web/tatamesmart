@@ -16,12 +16,10 @@ export async function ensureMaeAccount() {
     select id from "user" where lower(email) = ${email} limit 1
   `;
   let userId = found[0]?.id ?? "";
+  const initialPassword = (process.env.TATAMESMART_OWNER_INITIAL_PASSWORD || "").trim();
+  const previewPassword = process.env.DATABASE_URL ? "" : "TatameTest-Qr-2026";
+  const password = initialPassword.length >= 16 ? initialPassword : previewPassword;
   if (!userId) {
-    const initialPassword = (process.env.TATAMESMART_OWNER_INITIAL_PASSWORD || "").trim();
-    // Preview only (no Neon): a known test password so the mother account can
-    // log in without writing a secret into production.
-    const previewPassword = process.env.DATABASE_URL ? "" : "TatameTest-Qr-2026";
-    const password = initialPassword.length >= 16 ? initialPassword : previewPassword;
     if (password.length < 16) return "";
     userId = newId();
     const hashed = await hashPassword(password);
@@ -32,6 +30,13 @@ export async function ensureMaeAccount() {
     await sql`
       insert into "account" (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
       values (${newId()}, ${userId}, ${"credential"}, ${userId}, ${hashed}, now(), now())
+    `;
+  } else if (previewPassword.length >= 16) {
+    const hashed = await hashPassword(previewPassword);
+    await sql`
+      update "account"
+      set password = ${hashed}, "updatedAt" = now()
+      where "userId" = ${userId} and "providerId" = ${"credential"}
     `;
   }
   const school = await sql<{ user_id: string }>`select user_id from schools where user_id = ${userId}`;
