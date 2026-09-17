@@ -4,90 +4,155 @@ import { Button } from "@/components/ui";
 import { PLANS } from "@/lib/plans";
 import { SITE_DOMAIN, SITE_MAIL } from "@/lib/site";
 
-const BLOCKS = [
-  { title: "Alunos", text: "Ficha, faixa, turma, saúde e aniversário. Cada academia vê só a própria lista." },
-  { title: "Cobrança", text: "Régua de mensalidade no WhatsApp: 5 dias antes, no vencimento e no atraso." },
-  { title: "Frequência", text: "Calendário do mês, chamada por aula e faltas no fechamento." },
-  { title: "Operação", text: "Turmas, professores, loja, estoque, contas, agenda e campeonatos." },
+const REGUA = [
+  { when: "5 dias antes", text: "Mensagem no WhatsApp cadastrado do aluno. Tom amigável, vencimento chegando." },
+  { when: "No dia", text: "Avisa que chegou o vencimento. Sem o mestre precisar abrir conversa por conversa." },
+  { when: "No atraso", text: "Continua lembrando até a mensalidade entrar. O relatório mostra quem pagou e quem deve." },
+];
+
+const COMPARE = [
+  { label: "Alunos, turmas e frequência", basico: true, pro: true },
+  { label: "Mensalidades e contas a pagar", basico: true, pro: true },
+  { label: "Agenda da academia", basico: true, pro: true },
+  { label: "WhatsApp automático da mensalidade", basico: false, pro: true },
+  { label: "Loja, estoque e campeonatos", basico: false, pro: true },
+  { label: "Relatório de lucro do mês", basico: false, pro: true },
 ];
 
 export function Landing() {
   return (
     <div className="min-h-dvh bg-bg text-fg">
-      <header className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-5">
-        <TatameLogo compact />
-        <div className="flex items-center gap-2">
-          <Link to="/login" className="hidden min-h-11 items-center px-3 text-sm text-muted hover:text-fg sm:inline-flex">
-            Entrar
-          </Link>
-          <Link to="/login">
-            <Button>Criar academia</Button>
-          </Link>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-5 pb-20">
-        <section className="grid gap-10 py-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-end lg:py-16">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted">SaaS para academias de luta</p>
-            <h1 className="mt-3 max-w-xl text-4xl font-semibold tracking-tight sm:text-5xl">
-              A academia no controle. A mensalidade no WhatsApp do aluno.
+      <section className="grid min-h-dvh lg:grid-cols-2">
+        <div className="flex flex-col">
+          <header className="flex items-center justify-between gap-4 px-5 py-5 lg:px-10">
+            <TatameLogo compact />
+            <Link to="/login" className="inline-flex min-h-11 items-center text-sm text-muted hover:text-fg">
+              Entrar
+            </Link>
+          </header>
+          <div className="flex flex-1 flex-col justify-center px-5 pb-12 pt-6 lg:px-10 lg:pb-20">
+            <p className="text-sm text-muted">{SITE_DOMAIN}</p>
+            <h1 className="mt-4 max-w-[14ch] text-4xl font-semibold leading-[1.12] tracking-tight text-pretty sm:text-5xl">
+              O aluno esquece de pagar. O sistema não.
             </h1>
-            <p className="mt-4 max-w-lg text-base text-muted">
-              TatameSmart é o sistema da sua escola — alunos, turmas, frequência, loja e cobrança — com cada academia isolada da outra.
+            <p className="mt-5 max-w-md text-pretty text-base leading-relaxed text-muted">
+              Sistema da academia de luta: ficha, turma, frequência, loja e a mensalidade no WhatsApp do aluno, sozinha, até entrar.
             </p>
-            <p className="mt-3 text-sm text-subtle">{SITE_DOMAIN}</p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/login">
-                <Button>Criar minha academia</Button>
+                <Button>Criar academia</Button>
               </Link>
               <Link to="/login">
                 <Button variant="ghost">Ver demonstração</Button>
               </Link>
             </div>
+            <p className="mt-6 text-sm text-subtle">Básico R$ 59,90/mês · ProMaster R$ 99,90/mês</p>
           </div>
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {BLOCKS.map((b) => (
-              <li key={b.title} className="rounded-lg border border-border bg-surface p-4">
-                <p className="text-sm font-medium">{b.title}</p>
-                <p className="mt-2 text-sm text-muted">{b.text}</p>
+        </div>
+        <div className="relative min-h-[42vh] border-t border-border lg:min-h-dvh lg:border-t-0 lg:border-l">
+          <img
+            src="/login-hero.jpg"
+            alt="Treino no tatame"
+            className="absolute inset-0 size-full object-cover"
+            style={{ objectPosition: "12% 80%" }}
+            decoding="async"
+          />
+        </div>
+      </section>
+
+
+      <section className="border-t border-border">
+        <div className="mx-auto grid max-w-6xl gap-12 px-5 py-16 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] md:py-20">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight">A cobrança que o mestre não dispara na mão</h2>
+            <p className="mt-3 max-w-sm text-pretty text-sm leading-relaxed text-muted">
+              Cinco dias antes, no vencimento e no atraso. O texto das mensagens o dono edita. O envio o sistema faz.
+            </p>
+          </div>
+          <ol className="border-l border-border">
+            {REGUA.map((row) => (
+              <li key={row.when} className="relative px-5 py-4 sm:px-6">
+                <span className="absolute top-6 -left-px h-3 w-3 -translate-x-1/2 rounded-full border border-border bg-bg" />
+                <p className="text-sm font-medium">{row.when}</p>
+                <p className="mt-1 text-sm leading-relaxed text-muted">{row.text}</p>
               </li>
             ))}
-          </ul>
-        </section>
+          </ol>
+        </div>
+      </section>
 
-        <section id="planos" className="mt-6">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Planos mensais</p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight">Duas formas. Sem promoção vitalícia.</h2>
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            {PLANS.map((plan) => (
-              <article
-                key={plan.id}
-                className={`rounded-xl border p-6 ${plan.featured ? "border-accent bg-surface" : "border-border bg-surface"}`}
-              >
-                <p className="text-sm font-medium">{plan.name}</p>
-                <p className="mt-3 text-3xl font-semibold tabular tracking-tight">
-                  R$ {plan.price}
-                  <span className="ml-1 text-sm font-normal text-muted">{plan.period}</span>
-                </p>
-                <p className="mt-2 text-sm text-muted">{plan.blurb}</p>
-                <ul className="mt-5 grid gap-2 text-sm">
-                  {plan.features.map((f) => (
-                    <li key={f} className="text-fg">
-                      {f}
-                    </li>
+      <section className="border-t border-border">
+        <div className="mx-auto max-w-6xl px-5 py-16 md:py-20">
+          <h2 className="max-w-lg text-2xl font-semibold tracking-tight">No fim do mês, o número que importa é o lucro</h2>
+          <p className="mt-3 max-w-xl text-pretty text-sm leading-relaxed text-muted">
+            Recebeu do aluno, vendeu na loja, pagou professor, energia e aluguel do galpão. O relatório mostra o que sobrou.
+          </p>
+          <dl className="mt-10 grid border-y border-border sm:grid-cols-3">
+            <div className="border-b border-border py-6 sm:border-b-0 sm:border-r sm:pr-6">
+              <dt className="text-xs text-muted">Entrou</dt>
+              <dd className="mt-2 text-sm leading-relaxed">Mensalidades e loja do mês.</dd>
+            </div>
+            <div className="border-b border-border py-6 sm:border-b-0 sm:border-r sm:px-6">
+              <dt className="text-xs text-muted">Saiu</dt>
+              <dd className="mt-2 text-sm leading-relaxed">Aluguel, energia, folha, o que a academia pagou.</dd>
+            </div>
+            <div className="py-6 sm:pl-6">
+              <dt className="text-xs text-muted">Lucro</dt>
+              <dd className="mt-2 text-sm leading-relaxed">O que ficou depois de pagar tudo.</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section id="planos" className="border-t border-border">
+        <div className="mx-auto max-w-6xl px-5 py-16 md:py-20">
+          <h2 className="text-2xl font-semibold tracking-tight">Dois planos mensais</h2>
+          <p className="mt-3 max-w-lg text-pretty text-sm text-muted">
+            Sem taxa de adesão. A academia escolhe se quer só organizar ou também cobrar no WhatsApp.
+          </p>
+
+          <div className="mt-10 overflow-x-auto">
+            <table className="w-full min-w-[520px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="py-3 pr-4 font-medium text-muted"> </th>
+                  {PLANS.map((plan) => (
+                    <th key={plan.id} className="px-4 py-3 font-medium">
+                      <p>{plan.name}</p>
+                      <p className="mt-1 text-xl font-semibold tabular tracking-tight">
+                        R$ {plan.price}
+                        <span className="ml-1 text-xs font-normal text-muted">{plan.period}</span>
+                      </p>
+                    </th>
                   ))}
-                </ul>
-                <Link to="/login" className="mt-6 block">
-                  <Button className="w-full">{plan.cta}</Button>
-                </Link>
-              </article>
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARE.map((row) => (
+                  <tr key={row.label} className="border-b border-border">
+                    <td className="py-3 pr-4 text-muted">{row.label}</td>
+                    <td className="px-4 py-3">{row.basico ? "Inclui" : "—"}</td>
+                    <td className="px-4 py-3">{row.pro ? "Inclui" : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-8 grid gap-3 sm:grid-cols-2 sm:gap-4">
+            {PLANS.map((plan) => (
+              <Link key={plan.id} to="/login" className="block">
+                <Button variant={plan.featured ? "primary" : "ghost"} className="w-full">
+                  {plan.cta}
+                </Button>
+              </Link>
             ))}
           </div>
-        </section>
-      </main>
+        </div>
+      </section>
+
       <footer className="border-t border-border px-5 py-8">
-        <div className="mx-auto flex max-w-5xl flex-col gap-1 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-6xl flex-col gap-1 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
           <p>TatameSmart · {SITE_DOMAIN}</p>
           <p>{SITE_MAIL}</p>
         </div>
