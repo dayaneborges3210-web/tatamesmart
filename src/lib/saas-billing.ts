@@ -100,7 +100,7 @@ async function deskOf(userId: string): Promise<SaasDesk> {
   `;
   const paid = school[0]?.paid_until;
   return {
-    configured: mpConfigured(),
+    configured: await mpConfigured(),
     plan: school[0]?.billing_plan === "trial" ? "trial" : "completo",
     access: school[0]?.access_status === "blocked" || school[0]?.access_status === "vitalicio" ? school[0].access_status : "ok",
     paidUntil: paid ? new Date(paid).toISOString().slice(0, 10) : null,
@@ -127,7 +127,7 @@ export const saasCheckoutFn = createServerFn({ method: "POST" })
   .validator((d: { plan: SaasPlan; method: SaasMethod; returnUrl?: string }) => d)
   .handler(async ({ context, data }) => {
     const userId = await requireOwner(context.userId);
-    if (!mpConfigured()) throw new Error("A TatameSmart ainda não ligou o Mercado Pago no servidor.");
+    if (!(await mpConfigured())) throw new Error("A TatameSmart ainda não ligou o Mercado Pago.");
     const plan = asPlan(data.plan);
     const method: SaasMethod = data.method === "pix" ? "pix" : "card";
     const amountCents = SAAS_PRICE_CENTS[plan];

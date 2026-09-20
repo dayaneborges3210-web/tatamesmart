@@ -1,9 +1,11 @@
 import { Navigate, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Shell } from "@/components/shell";
-import { Badge, Button } from "@/components/ui";
+import { Badge, Button, Field, PasswordInput } from "@/components/ui";
 import {
   listAcademiesFn,
+  mpStatusFn,
+  saveMpTokenFn,
   setAccessFn,
   setPlanFn,
   type AcademyAccess,
@@ -40,6 +42,8 @@ function EmpresaBody() {
   const [rows, setRows] = useState<AcademyRow[] | null>(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
+  const [mpOn, setMpOn] = useState(false);
+  const [mpToken, setMpToken] = useState("");
 
   useEffect(() => {
     void listAcademiesFn()
@@ -48,6 +52,9 @@ function EmpresaBody() {
         setRows([]);
         setErr(e instanceof Error ? e.message : "Não carregou.");
       });
+    void mpStatusFn()
+      .then((s) => setMpOn(s.configured))
+      .catch(() => setMpOn(false));
   }, []);
 
   async function run(key: string, work: () => Promise<AcademyRow[]>) {
@@ -77,6 +84,32 @@ function EmpresaBody() {
       <p className="mt-1 text-sm text-muted">
         Toda academia que se cadastrou. Trial, Completo R$ 99,00 ou vitalício — e bloqueio pelo UID.
       </p>
+      <form
+        className="mt-6 max-w-xl rounded-lg border border-border bg-surface p-5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void run("mp", async () => {
+            await saveMpTokenFn({ data: { token: mpToken } });
+            setMpOn(true);
+            setMpToken("");
+            return rows ?? [];
+          });
+        }}
+      >
+        <p className="text-sm font-medium">Mercado Pago</p>
+        <p className="mt-1 text-sm text-muted">
+          Cole o Access Token de produção. O R$ 99,00 de cada academia cai nessa conta.
+        </p>
+        <p className="mt-2 text-xs text-subtle">{mpOn ? "Ligado" : "Ainda não ligado"}</p>
+        <div className="mt-3">
+          <Field label="Access Token">
+            <PasswordInput value={mpToken} onChange={(e) => setMpToken(e.target.value)} autoComplete="off" />
+          </Field>
+        </div>
+        <Button className="mt-3" type="submit" disabled={!!busy || mpToken.trim().length < 20}>
+          {busy === "mp" ? "Salvando…" : "Salvar token"}
+        </Button>
+      </form>
       {err ? <p className="mt-3 text-sm text-danger">{err}</p> : null}
       {rows === null ? (
         <p className="mt-6 text-sm text-muted">Carregando academias…</p>

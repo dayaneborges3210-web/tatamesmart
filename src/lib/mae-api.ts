@@ -3,6 +3,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { isDemoEmail } from "@/lib/demo";
 import { ensureMaeAccount } from "@/lib/mae.server";
+import { mpConfigured, saveMpAccessToken } from "@/lib/mp";
 import { isMaeEmail, PLATFORM_OWNER_EMAIL } from "@/lib/site";
 
 export type AcademyPlan = "trial" | "completo";
@@ -125,4 +126,20 @@ export const setPlanFn = createServerFn({ method: "POST" })
       on conflict (user_id) do update set billing_plan = ${data.plan}, access_status = ${"ok"}
     `;
     return listRows();
+  });
+
+export const mpStatusFn = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    await requireMae(context.userId);
+    return { configured: await mpConfigured() };
+  });
+
+export const saveMpTokenFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { token: string }) => d)
+  .handler(async ({ context, data }) => {
+    await requireMae(context.userId);
+    await saveMpAccessToken(data.token);
+    return { configured: true };
   });
