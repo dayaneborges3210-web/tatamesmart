@@ -5,7 +5,7 @@ import { isDemoEmail } from "@/lib/demo";
 import { ensureMaeAccount } from "@/lib/mae.server";
 import { isMaeEmail, PLATFORM_OWNER_EMAIL } from "@/lib/site";
 
-export type AcademyPlan = "trial" | "basico" | "promaster";
+export type AcademyPlan = "trial" | "completo";
 export type AcademyAccess = "ok" | "blocked" | "vitalicio";
 
 export type AcademyRow = {
@@ -19,8 +19,8 @@ export type AcademyRow = {
 };
 
 function asPlan(v: string | null | undefined): AcademyPlan {
-  if (v === "trial" || v === "promaster" || v === "basico") return v;
-  return "basico";
+  if (v === "trial") return "trial";
+  return "completo";
 }
 
 function asAccess(v: string | null | undefined): AcademyAccess {

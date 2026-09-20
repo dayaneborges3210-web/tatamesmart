@@ -23,8 +23,7 @@ export function AssinaturaPage() {
 }
 
 function planLabel(plan: string) {
-  if (plan === "promaster") return "ProMaster";
-  if (plan === "basico") return "Básico";
+  if (plan === "completo") return "Completo";
   return "Trial";
 }
 
@@ -85,7 +84,7 @@ function AssinaturaBody() {
       <p className="text-xs font-medium uppercase tracking-wide text-muted">Sua academia</p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Assinatura TatameSmart</h1>
       <p className="mt-1 text-sm text-muted">
-        Básico R$ 59,90/mês ou ProMaster R$ 99,90/mês. O plano só muda depois que o Mercado Pago confirmar.
+        Completo R$ 99,00 por mês. O plano só muda depois que o Mercado Pago confirmar.
       </p>
       {err ? <p className="mt-3 text-sm text-danger">{err}</p> : null}
       {!desk ? (
@@ -119,14 +118,13 @@ function AssinaturaBody() {
 
           {!desk.configured ? (
             <p className="mt-4 rounded-lg border border-warning/40 bg-surface px-4 py-3 text-sm text-muted">
-              O Mercado Pago ainda não está ligado no servidor. Cadastre o token da TatameSmart na hospedagem (Vercel), não no Railway da Corex.
+              O Mercado Pago ainda não está ligado no servidor da TatameSmart.
             </p>
           ) : null}
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <div className="mt-6 max-w-xl">
             {PLANS.map((plan) => {
-              const id: SaasPlan = plan.id === "pro" ? "promaster" : "basico";
-              const current = desk.plan === id && desk.access !== "blocked";
+              const current = desk.plan === "completo" && desk.access !== "blocked";
               return (
                 <div key={plan.id} className="rounded-lg border border-border bg-surface p-5">
                   <div className="flex items-start justify-between gap-3">
@@ -149,11 +147,11 @@ function AssinaturaBody() {
                     <Button className="mt-5 w-full" variant="ghost" disabled>Vitalício</Button>
                   ) : (
                     <div className="mt-5 flex flex-wrap gap-2">
-                      <Button type="button" disabled={!!busy || !desk.configured} onClick={() => void pay(id, "pix")}>
-                        {busy === id + "pix" ? "Abrindo Pix…" : "Pagar no Pix"}
+                      <Button type="button" disabled={!!busy || !desk.configured} onClick={() => void pay("completo", "pix")}>
+                        {busy === "completopix" ? "Abrindo Pix…" : "Pagar no Pix"}
                       </Button>
-                      <Button type="button" variant="ghost" disabled={!!busy || !desk.configured} onClick={() => void pay(id, "card")}>
-                        {busy === id + "card" ? "Abrindo cartão…" : "Assinar no cartão"}
+                      <Button type="button" variant="ghost" disabled={!!busy || !desk.configured} onClick={() => void pay("completo", "card")}>
+                        {busy === "completocard" ? "Abrindo cartão…" : "Assinar no cartão"}
                       </Button>
                     </div>
                   )}

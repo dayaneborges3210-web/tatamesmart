@@ -33,8 +33,7 @@ function membership(row: AcademyRow) {
   if (row.access === "blocked") return { label: "Bloqueada", tone: "danger" as const };
   if (row.access === "vitalicio") return { label: "Vitalício", tone: "success" as const };
   if (row.plan === "trial") return { label: "Trial", tone: "warning" as const };
-  if (row.plan === "promaster") return { label: "ProMaster", tone: "neutral" as const };
-  return { label: "Básico", tone: "neutral" as const };
+  return { label: "Completo", tone: "neutral" as const };
 }
 
 function EmpresaBody() {
@@ -76,7 +75,7 @@ function EmpresaBody() {
       <p className="text-xs font-medium uppercase tracking-wide text-muted">Empresa mãe</p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Academias</h1>
       <p className="mt-1 text-sm text-muted">
-        Toda academia que se cadastrou. Trial, Básico, ProMaster ou vitalício — e bloqueio pelo UID.
+        Toda academia que se cadastrou. Trial, Completo R$ 99,00 ou vitalício — e bloqueio pelo UID.
       </p>
       {err ? <p className="mt-3 text-sm text-danger">{err}</p> : null}
       {rows === null ? (
@@ -119,11 +118,8 @@ function EmpresaBody() {
                         <Button type="button" variant="ghost" disabled={!!busy} onClick={() => setPlan(r.userId, "trial")}>
                           Trial
                         </Button>
-                        <Button type="button" variant="ghost" disabled={!!busy} onClick={() => setPlan(r.userId, "basico")}>
-                          Básico
-                        </Button>
-                        <Button type="button" variant="ghost" disabled={!!busy} onClick={() => setPlan(r.userId, "promaster")}>
-                          ProMaster
+                        <Button type="button" variant="ghost" disabled={!!busy} onClick={() => setPlan(r.userId, "completo")}>
+                          Completo
                         </Button>
                         <Button type="button" variant="ghost" disabled={!!busy} onClick={() => setAccess(r.userId, "vitalicio")}>
                           Vitalício

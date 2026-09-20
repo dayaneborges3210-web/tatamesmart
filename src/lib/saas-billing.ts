@@ -6,13 +6,13 @@ import { getSql } from "@/lib/db";
 import { mpConfigured, mpFetch } from "@/lib/mp";
 import { isMaeEmail, SITE_URL } from "@/lib/site";
 
-export const SAAS_PRICE_CENTS = { basico: 5990, promaster: 9990 } as const;
-export type SaasPlan = keyof typeof SAAS_PRICE_CENTS;
+export const SAAS_PRICE_CENTS = { completo: 9900 } as const;
+export type SaasPlan = "completo";
 export type SaasMethod = "pix" | "card";
 
 export type SaasDesk = {
   configured: boolean;
-  plan: "trial" | "basico" | "promaster";
+  plan: "trial" | "completo";
   access: "ok" | "blocked" | "vitalicio";
   paidUntil: string | null;
   payments: {
@@ -29,8 +29,8 @@ function newId() {
   return randomBytes(18).toString("hex");
 }
 
-function asPlan(v: string | null | undefined): SaasPlan {
-  return v === "basico" ? "basico" : "promaster";
+function asPlan(_v?: string | null): SaasPlan {
+  return "completo";
 }
 
 async function ensureBilling() {
@@ -101,9 +101,7 @@ async function deskOf(userId: string): Promise<SaasDesk> {
   const paid = school[0]?.paid_until;
   return {
     configured: mpConfigured(),
-    plan: school[0]?.billing_plan === "trial" || school[0]?.billing_plan === "promaster" || school[0]?.billing_plan === "basico"
-      ? school[0].billing_plan
-      : "trial",
+    plan: school[0]?.billing_plan === "trial" ? "trial" : "completo",
     access: school[0]?.access_status === "blocked" || school[0]?.access_status === "vitalicio" ? school[0].access_status : "ok",
     paidUntil: paid ? new Date(paid).toISOString().slice(0, 10) : null,
     payments: payments.map((p) => ({
@@ -147,7 +145,7 @@ export const saasCheckoutFn = createServerFn({ method: "POST" })
       values (${id}, ${userId}, ${plan}, ${method.toUpperCase()}, ${amountCents}, ${"PENDING"})
     `;
     const origin = backUrl(data.returnUrl);
-    const title = plan === "basico" ? "TatameSmart Básico — mensalidade" : "TatameSmart ProMaster — mensalidade";
+    const title = "TatameSmart Completo — R$ 99,00 por mês";
     const email = (user[0]?.email || "").trim();
     if (method === "card") {
       if (!email.includes("@")) throw new Error("A academia precisa de e-mail para assinar no cartão.");

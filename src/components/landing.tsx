@@ -10,13 +10,12 @@ const REGUA = [
   { when: "No atraso", text: "Continua lembrando até a mensalidade entrar. O relatório mostra quem pagou e quem deve." },
 ];
 
-const COMPARE = [
-  { label: "Alunos, turmas e frequência", basico: true, pro: true },
-  { label: "Mensalidades e contas a pagar", basico: true, pro: true },
-  { label: "Agenda da academia", basico: true, pro: true },
-  { label: "WhatsApp automático da mensalidade", basico: false, pro: true },
-  { label: "Loja, estoque e campeonatos", basico: false, pro: true },
-  { label: "Relatório de lucro do mês", basico: false, pro: true },
+const INCLUSO = [
+  "Alunos, turmas e frequência",
+  "Mensalidades e contas a pagar",
+  "WhatsApp automático da mensalidade",
+  "Loja, estoque e campeonatos",
+  "Relatório de lucro do mês",
 ];
 
 export function Landing() {
@@ -46,7 +45,7 @@ export function Landing() {
                 <Button variant="ghost">Ver demonstração</Button>
               </Link>
             </div>
-            <p className="mt-6 text-sm text-subtle">Básico R$ 59,90/mês · ProMaster R$ 99,90/mês</p>
+            <p className="mt-6 text-sm text-subtle">Completo R$ 99,00/mês</p>
           </div>
         </div>
         <div className="relative min-h-[42vh] border-t border-border lg:min-h-dvh lg:border-t-0 lg:border-l">
@@ -106,47 +105,25 @@ export function Landing() {
 
       <section id="planos" className="border-t border-border">
         <div className="mx-auto max-w-6xl px-5 py-16 md:py-20">
-          <h2 className="text-2xl font-semibold tracking-tight">Dois planos mensais</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Um plano. A academia completa.</h2>
           <p className="mt-3 max-w-lg text-pretty text-sm text-muted">
-            Sem taxa de adesão. A academia escolhe se quer só organizar ou também cobrar no WhatsApp.
+            Sem taxa de adesão. R$ 99,00 por mês, com cobrança no WhatsApp e o lucro no relatório.
           </p>
 
-          <div className="mt-10 overflow-x-auto">
-            <table className="w-full min-w-[520px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="py-3 pr-4 font-medium text-muted"> </th>
-                  {PLANS.map((plan) => (
-                    <th key={plan.id} className="px-4 py-3 font-medium">
-                      <p>{plan.name}</p>
-                      <p className="mt-1 text-xl font-semibold tabular tracking-tight">
-                        R$ {plan.price}
-                        <span className="ml-1 text-xs font-normal text-muted">{plan.period}</span>
-                      </p>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARE.map((row) => (
-                  <tr key={row.label} className="border-b border-border">
-                    <td className="py-3 pr-4 text-muted">{row.label}</td>
-                    <td className="px-4 py-3">{row.basico ? "Inclui" : "—"}</td>
-                    <td className="px-4 py-3">{row.pro ? "Inclui" : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 sm:gap-4">
-            {PLANS.map((plan) => (
-              <Link key={plan.id} to="/assinatura" className="block">
-                <Button variant={plan.featured ? "primary" : "ghost"} className="w-full">
-                  {plan.cta}
-                </Button>
-              </Link>
-            ))}
+          <div className="mt-10 max-w-lg rounded-lg border border-border bg-surface p-6">
+            <p className="text-sm font-medium">{PLANS[0].name}</p>
+            <p className="mt-2 text-3xl font-semibold tracking-tight tabular">
+              R$ {PLANS[0].price}
+              <span className="ml-2 text-sm font-normal text-muted">{PLANS[0].period}</span>
+            </p>
+            <ul className="mt-6 grid gap-2 text-sm text-muted">
+              {INCLUSO.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            <Link to="/assinatura" className="mt-6 block">
+              <Button className="w-full">{PLANS[0].cta}</Button>
+            </Link>
           </div>
         </div>
       </section>
