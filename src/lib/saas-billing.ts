@@ -38,6 +38,7 @@ async function ensureBilling() {
   await sql.query(`alter table schools add column if not exists billing_plan text not null default 'basico'`).catch(() => undefined);
   await sql.query(`alter table schools add column if not exists access_status text not null default 'ok'`).catch(() => undefined);
   await sql.query(`alter table schools add column if not exists paid_until date`).catch(() => undefined);
+  await sql.query(`alter table schools add column if not exists mp_preapproval_id text`).catch(() => undefined);
   await sql.query(`
     create table if not exists saas_payments (
       id text primary key,
@@ -147,10 +148,36 @@ export const saasCheckoutFn = createServerFn({ method: "POST" })
     `;
     const origin = backUrl(data.returnUrl);
     const title = plan === "basico" ? "TatameSmart Básico — mensalidade" : "TatameSmart ProMaster — mensalidade";
-    const excluded =
-      method === "pix"
-        ? [{ id: "credit_card" }, { id: "debit_card" }, { id: "ticket" }, { id: "atm" }]
-        : [{ id: "ticket" }, { id: "atm" }, { id: "bank_transfer" }];
+    const email = (user[0]?.email || "").trim();
+    if (method === "card") {
+      if (!email.includes("@")) throw new Error("A academia precisa de e-mail para assinar no cartão.");
+      const sub = await mpFetch<{ id: string; init_point?: string; status?: string }>(
+        "/preapproval",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            reason: title,
+            external_reference: `${userId}:${plan}:${id}`,
+            payer_email: email,
+            auto_recurring: {
+              frequency: 1,
+              frequency_type: "months",
+              transaction_amount: amountCents / 100,
+              currency_id: "BRL",
+            },
+            back_url: `${origin}/assinatura?pagamento=ok`,
+            status: "pending",
+          }),
+        },
+      );
+      const checkoutUrl = sub.init_point;
+      if (!checkoutUrl) throw new Error("O Mercado Pago não devolveu o link da assinatura.");
+      await sql`
+        update saas_payments set preference_id = ${sub.id}, checkout_url = ${checkoutUrl} where id = ${id}
+      `;
+      return { paymentId: id, checkoutUrl, plan, method, amountCents };
+    }
+    const excluded = [{ id: "credit_card" }, { id: "debit_card" }, { id: "ticket" }, { id: "atm" }];
     const preference = await mpFetch<{ id: string; init_point?: string; sandbox_init_point?: string }>(
       "/checkout/preferences",
       {
@@ -166,8 +193,8 @@ export const saasCheckoutFn = createServerFn({ method: "POST" })
               unit_price: amountCents / 100,
             },
           ],
-          payer: { email: user[0]?.email || undefined, name: school[0]?.name || user[0]?.name || "Academia" },
-          payment_methods: { excluded_payment_types: excluded, installments: method === "pix" ? 1 : 12 },
+          payer: { email: email || undefined, name: school[0]?.name || user[0]?.name || "Academia" },
+          payment_methods: { excluded_payment_types: excluded, installments: 1 },
           back_urls: {
             success: `${origin}/assinatura?pagamento=ok`,
             failure: `${origin}/assinatura?pagamento=falhou`,
@@ -243,13 +270,32 @@ export async function applyMercadoPagoPayment(mpPaymentId: string, expectedUserI
 }
 
 export async function handleSaasWebhook(query: Record<string, unknown>, body: Record<string, unknown>) {
-  const type = String(body.type || body.topic || query.type || query.topic || "");
+  const type = String(body.type || body.topic || query.type || query.topic || "").toLowerCase();
   const data = (body.data && typeof body.data === "object" ? body.data : {}) as Record<string, unknown>;
   const id = String(data.id || body.id || query.id || query["data.id"] || "");
   if (!id) return { received: true };
-  if (type && !type.toLowerCase().includes("payment")) return { received: true };
   try {
-    await applyMercadoPagoPayment(id);
+    if (type.includes("preapproval") || type.includes("subscription")) {
+      const sub = await mpFetch<{
+        id: string;
+        status?: string;
+        external_reference?: string;
+      }>(`/preapproval/${encodeURIComponent(id)}`);
+      const reference = String(sub.external_reference || "");
+      const [userId, planRaw] = reference.split(":");
+      if (userId && (sub.status === "authorized" || sub.status === "paused")) {
+        const plan = asPlan(planRaw);
+        const until = new Date(Date.now() + 32 * 86_400_000).toISOString().slice(0, 10);
+        const sql = await getSql();
+        await sql`
+          update schools
+          set billing_plan = ${plan}, access_status = ${"ok"}, paid_until = ${until}, mp_preapproval_id = ${String(sub.id)}
+          where user_id = ${userId}
+        `;
+      }
+      return { received: true };
+    }
+    if (!type || type.includes("payment")) await applyMercadoPagoPayment(id);
   } catch {
     /* conciliação no retorno da academia */
   }

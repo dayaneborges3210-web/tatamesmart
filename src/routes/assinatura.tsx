@@ -153,7 +153,7 @@ function AssinaturaBody() {
                         {busy === id + "pix" ? "Abrindo Pix…" : "Pagar no Pix"}
                       </Button>
                       <Button type="button" variant="ghost" disabled={!!busy || !desk.configured} onClick={() => void pay(id, "card")}>
-                        {busy === id + "card" ? "Abrindo cartão…" : "Pagar no cartão"}
+                        {busy === id + "card" ? "Abrindo cartão…" : "Assinar no cartão"}
                       </Button>
                     </div>
                   )}
@@ -162,7 +162,7 @@ function AssinaturaBody() {
             })}
           </div>
           <p className="mt-4 text-xs text-subtle">
-            Pix libera o mês. Cartão também. A renovação do mês seguinte é um novo pagamento, até a cobrança automática do cartão ficar estável.
+            Pix libera o mês. Cartão vira assinatura mensal automática no Mercado Pago.
           </p>
         </>
       )}
