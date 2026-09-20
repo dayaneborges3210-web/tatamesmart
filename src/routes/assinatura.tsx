@@ -13,8 +13,9 @@ export const Route = createFileRoute("/assinatura")({ component: AssinaturaPage 
 
 export function AssinaturaPage() {
   const { user, isPending } = useCurrentUserState();
-  if (isPending) return <Shell><p className="text-sm text-muted">Carregando…</p></Shell>;
-  if (isMaeEmail(user?.primaryEmail)) return <Navigate to="/empresa" />;
+  if (isPending) return <p className="p-6 text-sm text-muted">Carregando…</p>;
+  if (!user) return <Navigate to="/login" search={{ criar: "1" }} />;
+  if (isMaeEmail(user.primaryEmail)) return <Navigate to="/empresa" />;
   return (
     <Shell>
       <AssinaturaBody />

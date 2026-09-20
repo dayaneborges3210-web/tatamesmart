@@ -8,7 +8,23 @@ import { TatameLogo } from "@/components/logo";
 import { confirmResetFn, requestResetFn } from "@/lib/reset-password";
 import { DEMO_EMAIL, DEMO_PASSWORD, DEMO_SCHOOL } from "@/lib/demo";
 
-export const Route = createFileRoute("/login")({ component: Login });
+export const Route = createFileRoute("/login")({
+  validateSearch: (s: Record<string, unknown>): { criar?: "1" } => {
+    if (s.criar === "1" || s.criar === 1 || s.criar === true) return { criar: "1" };
+    return {};
+  },
+  component: Login,
+});
+
+function afterLogin(kind: "entrar" | "criar") {
+  if (kind === "criar") return "/assinatura";
+  try {
+    if (new URLSearchParams(window.location.search).get("criar") === "1") return "/assinatura";
+  } catch {
+    /* ignore */
+  }
+  return "/";
+}
 
 async function postEntrar(payload: {
   kind: "entrar" | "criar";
@@ -29,7 +45,8 @@ async function postEntrar(payload: {
 
 function Login() {
   const { user } = useCurrentUserState();
-  const [mode, setMode] = useState<"entrar" | "criar" | "restaurar">("entrar");
+  const search = Route.useSearch();
+  const [mode, setMode] = useState<"entrar" | "criar" | "restaurar">(search.criar === "1" ? "criar" : "entrar");
   const [school, setSchool] = useState("");
   const [email, setEmail] = useState(import.meta.env.DEV ? "contato@smarttatame.com.br" : "");
   const [password, setPassword] = useState(import.meta.env.DEV ? "TatameTest-Qr-2026" : "");
@@ -41,12 +58,12 @@ function Login() {
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to="/" />;
+  if (user) return <Navigate to={afterLogin(search.criar === "1" ? "criar" : "entrar")} />;
 
-  async function finishLogin(token: string) {
+  async function finishLogin(token: string, kind: "entrar" | "criar" = "entrar") {
     keepSessionToken(token);
     keepPreviewSession(token);
-    window.location.replace("/");
+    window.location.replace(afterLogin(kind));
   }
 
   async function enterWithEmail() {
@@ -56,7 +73,7 @@ function Login() {
       password,
       name: school.trim() || "Minha academia",
     });
-    await finishLogin(token);
+    await finishLogin(token, mode === "criar" ? "criar" : "entrar");
   }
 
   async function enterDemo() {
@@ -75,7 +92,7 @@ function Login() {
           name: DEMO_SCHOOL,
         });
       }
-      await finishLogin(token);
+      await finishLogin(token, "entrar");
     } catch (err) {
       setError(loginErrorMessage(err, "entrar"));
       setBusy(false);
@@ -163,7 +180,7 @@ function Login() {
                 onClick={() => {
                   setError("");
                   setBusy(true);
-                  void signIn(p.providerId, { callbackURL: "/" }).catch((err: unknown) => {
+                  void signIn(p.providerId, { callbackURL: afterLogin(mode === "criar" ? "criar" : "entrar") }).catch((err: unknown) => {
                     setError(loginErrorMessage(err, "oauth"));
                     setBusy(false);
                   });

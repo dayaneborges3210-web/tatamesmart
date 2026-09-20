@@ -38,7 +38,7 @@ export function Landing() {
               Sistema da academia de luta: ficha, turma, frequência, loja e a mensalidade no WhatsApp do aluno, sozinha, até entrar.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/login">
+              <Link to="/login" search={{ criar: "1" }}>
                 <Button>Criar academia</Button>
               </Link>
               <Link to="/login">
@@ -121,7 +121,7 @@ export function Landing() {
                 <li key={item}>{item}</li>
               ))}
             </ul>
-            <Link to="/assinatura" className="mt-6 block">
+            <Link to="/login" search={{ criar: "1" }} className="mt-6 block">
               <Button className="w-full">{PLANS[0].cta}</Button>
             </Link>
           </div>
