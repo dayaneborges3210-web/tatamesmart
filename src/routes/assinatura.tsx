@@ -28,12 +28,20 @@ function planLabel(plan: string) {
   return "Trial";
 }
 
-function AssinaturaBody() {
+export function AssinaturaBody() {
   const user = useCurrentUser();
   const { role } = useDojo();
   const [desk, setDesk] = useState<SaasDesk | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
+
+  useEffect(() => {
+    try {
+      localStorage.removeItem("tatamesmart-pagar");
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     if (role === "staff") return;

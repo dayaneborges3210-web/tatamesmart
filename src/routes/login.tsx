@@ -17,9 +17,19 @@ export const Route = createFileRoute("/login")({
 });
 
 function afterLogin(kind: "entrar" | "criar") {
-  if (kind === "criar") return "/assinatura";
+  if (kind === "criar") {
+    try {
+      localStorage.setItem("tatamesmart-pagar", "1");
+    } catch {
+      /* ignore */
+    }
+    return "/?pagar=1";
+  }
   try {
-    if (new URLSearchParams(window.location.search).get("criar") === "1") return "/assinatura";
+    if (new URLSearchParams(window.location.search).get("criar") === "1") {
+      localStorage.setItem("tatamesmart-pagar", "1");
+      return "/?pagar=1";
+    }
   } catch {
     /* ignore */
   }
@@ -58,7 +68,11 @@ function Login() {
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to={afterLogin(search.criar === "1" ? "criar" : "entrar")} />;
+  if (user) {
+    const dest = afterLogin(search.criar === "1" ? "criar" : "entrar");
+    if (dest.includes("pagar=1")) return <Navigate to="/" search={{ pagar: "1" }} />;
+    return <Navigate to="/" />;
+  }
 
   async function finishLogin(token: string, kind: "entrar" | "criar" = "entrar") {
     keepSessionToken(token);
