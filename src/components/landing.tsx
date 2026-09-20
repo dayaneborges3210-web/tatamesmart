@@ -141,7 +141,7 @@ export function Landing() {
 
           <div className="mt-8 grid gap-3 sm:grid-cols-2 sm:gap-4">
             {PLANS.map((plan) => (
-              <Link key={plan.id} to="/login" className="block">
+              <Link key={plan.id} to="/assinatura" className="block">
                 <Button variant={plan.featured ? "primary" : "ghost"} className="w-full">
                   {plan.cta}
                 </Button>

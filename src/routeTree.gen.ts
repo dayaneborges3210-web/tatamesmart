@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AgendaRouteImport } from './routes/agenda'
 import { Route as AlunosRouteImport } from './routes/alunos'
+import { Route as AssinaturaRouteImport } from './routes/assinatura'
 import { Route as CampeonatosRouteImport } from './routes/campeonatos'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as ContasRouteImport } from './routes/contas'
@@ -26,6 +27,7 @@ import { Route as ProfessoresRouteImport } from './routes/professores'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as TurmasRouteImport } from './routes/turmas'
 import { Route as VideoRouteImport } from './routes/video'
+import { Route as ApiBillingWebhookRouteImport } from './routes/api/billing-webhook'
 import { Route as ApiEntrarRouteImport } from './routes/api/entrar'
 import { Route as ApiWaBotRouteImport } from './routes/api/wa-bot'
 import { Route as ApiWaCredsRouteImport } from './routes/api/wa-creds'
@@ -45,6 +47,11 @@ const AgendaRoute = AgendaRouteImport.update({
 const AlunosRoute = AlunosRouteImport.update({
   id: '/alunos',
   path: '/alunos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssinaturaRoute = AssinaturaRouteImport.update({
+  id: '/assinatura',
+  path: '/assinatura',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CampeonatosRoute = CampeonatosRouteImport.update({
@@ -117,6 +124,11 @@ const VideoRoute = VideoRouteImport.update({
   path: '/video',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBillingWebhookRoute = ApiBillingWebhookRouteImport.update({
+  id: '/api/billing-webhook',
+  path: '/api/billing-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiEntrarRoute = ApiEntrarRouteImport.update({
   id: '/api/entrar',
   path: '/api/entrar',
@@ -147,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agenda': typeof AgendaRoute
   '/alunos': typeof AlunosRoute
+  '/assinatura': typeof AssinaturaRoute
   '/campeonatos': typeof CampeonatosRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/contas': typeof ContasRoute
@@ -161,6 +174,7 @@ export interface FileRoutesByFullPath {
   '/relatorios': typeof RelatoriosRoute
   '/turmas': typeof TurmasRoute
   '/video': typeof VideoRoute
+  '/api/billing-webhook': typeof ApiBillingWebhookRoute
   '/api/entrar': typeof ApiEntrarRoute
   '/api/wa-bot': typeof ApiWaBotRoute
   '/api/wa-creds': typeof ApiWaCredsRoute
@@ -171,6 +185,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agenda': typeof AgendaRoute
   '/alunos': typeof AlunosRoute
+  '/assinatura': typeof AssinaturaRoute
   '/campeonatos': typeof CampeonatosRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/contas': typeof ContasRoute
@@ -185,6 +200,7 @@ export interface FileRoutesByTo {
   '/relatorios': typeof RelatoriosRoute
   '/turmas': typeof TurmasRoute
   '/video': typeof VideoRoute
+  '/api/billing-webhook': typeof ApiBillingWebhookRoute
   '/api/entrar': typeof ApiEntrarRoute
   '/api/wa-bot': typeof ApiWaBotRoute
   '/api/wa-creds': typeof ApiWaCredsRoute
@@ -196,6 +212,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/agenda': typeof AgendaRoute
   '/alunos': typeof AlunosRoute
+  '/assinatura': typeof AssinaturaRoute
   '/campeonatos': typeof CampeonatosRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/contas': typeof ContasRoute
@@ -210,6 +227,7 @@ export interface FileRoutesById {
   '/relatorios': typeof RelatoriosRoute
   '/turmas': typeof TurmasRoute
   '/video': typeof VideoRoute
+  '/api/billing-webhook': typeof ApiBillingWebhookRoute
   '/api/entrar': typeof ApiEntrarRoute
   '/api/wa-bot': typeof ApiWaBotRoute
   '/api/wa-creds': typeof ApiWaCredsRoute
@@ -222,6 +240,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agenda'
     | '/alunos'
+    | '/assinatura'
     | '/campeonatos'
     | '/configuracoes'
     | '/contas'
@@ -236,6 +255,7 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/turmas'
     | '/video'
+    | '/api/billing-webhook'
     | '/api/entrar'
     | '/api/wa-bot'
     | '/api/wa-creds'
@@ -246,6 +266,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agenda'
     | '/alunos'
+    | '/assinatura'
     | '/campeonatos'
     | '/configuracoes'
     | '/contas'
@@ -260,6 +281,7 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/turmas'
     | '/video'
+    | '/api/billing-webhook'
     | '/api/entrar'
     | '/api/wa-bot'
     | '/api/wa-creds'
@@ -270,6 +292,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agenda'
     | '/alunos'
+    | '/assinatura'
     | '/campeonatos'
     | '/configuracoes'
     | '/contas'
@@ -284,6 +307,7 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/turmas'
     | '/video'
+    | '/api/billing-webhook'
     | '/api/entrar'
     | '/api/wa-bot'
     | '/api/wa-creds'
@@ -295,6 +319,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgendaRoute: typeof AgendaRoute
   AlunosRoute: typeof AlunosRoute
+  AssinaturaRoute: typeof AssinaturaRoute
   CampeonatosRoute: typeof CampeonatosRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   ContasRoute: typeof ContasRoute
@@ -309,6 +334,7 @@ export interface RootRouteChildren {
   RelatoriosRoute: typeof RelatoriosRoute
   TurmasRoute: typeof TurmasRoute
   VideoRoute: typeof VideoRoute
+  ApiBillingWebhookRoute: typeof ApiBillingWebhookRoute
   ApiEntrarRoute: typeof ApiEntrarRoute
   ApiWaBotRoute: typeof ApiWaBotRoute
   ApiWaCredsRoute: typeof ApiWaCredsRoute
@@ -337,6 +363,13 @@ declare module '@tanstack/react-router' {
       path: '/alunos'
       fullPath: '/alunos'
       preLoaderRoute: typeof AlunosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assinatura': {
+      id: '/assinatura'
+      path: '/assinatura'
+      fullPath: '/assinatura'
+      preLoaderRoute: typeof AssinaturaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/campeonatos': {
@@ -437,6 +470,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VideoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/billing-webhook': {
+      id: '/api/billing-webhook'
+      path: '/api/billing-webhook'
+      fullPath: '/api/billing-webhook'
+      preLoaderRoute: typeof ApiBillingWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/entrar': {
       id: '/api/entrar'
       path: '/api/entrar'
@@ -479,6 +519,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgendaRoute: AgendaRoute,
   AlunosRoute: AlunosRoute,
+  AssinaturaRoute: AssinaturaRoute,
   CampeonatosRoute: CampeonatosRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
   ContasRoute: ContasRoute,
@@ -493,6 +534,7 @@ const rootRouteChildren: RootRouteChildren = {
   RelatoriosRoute: RelatoriosRoute,
   TurmasRoute: TurmasRoute,
   VideoRoute: VideoRoute,
+  ApiBillingWebhookRoute: ApiBillingWebhookRoute,
   ApiEntrarRoute: ApiEntrarRoute,
   ApiWaBotRoute: ApiWaBotRoute,
   ApiWaCredsRoute: ApiWaCredsRoute,
