@@ -60,21 +60,17 @@ async function listRows(): Promise<AcademyRow[]> {
     billing_plan: string | null;
   }>`
     select
-      u.id,
+      s.user_id as id,
       u.name as user_name,
       u.email,
-      u."createdAt",
+      coalesce(u."createdAt", now()) as "createdAt",
       s.name as school_name,
       s.access_status,
       s.billing_plan
-    from "user" u
-    left join schools s on s.user_id = u.id
+    from schools s
+    left join "user" u on u.id = s.user_id
     where lower(coalesce(u.email, '')) <> ${PLATFORM_OWNER_EMAIL}
-      and not exists (
-        select 1 from staff st
-        where st.login_user_id = u.id
-      )
-    order by u."createdAt" desc
+    order by lower(coalesce(s.name, u.name, ''))
   `;
   return rows.map((r) => ({
     userId: r.id,

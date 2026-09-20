@@ -1,7 +1,7 @@
 import { Navigate, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Shell } from "@/components/shell";
-import { Badge, Button, Field, PasswordInput } from "@/components/ui";
+import { Badge, Button, Field, Input, PasswordInput } from "@/components/ui";
 import {
   listAcademiesFn,
   mpStatusFn,
@@ -44,6 +44,7 @@ function EmpresaBody() {
   const [err, setErr] = useState("");
   const [mpOn, setMpOn] = useState(false);
   const [mpToken, setMpToken] = useState("");
+  const [q, setQ] = useState("");
 
   useEffect(() => {
     void listAcademiesFn()
@@ -113,10 +114,31 @@ function EmpresaBody() {
       {err ? <p className="mt-3 text-sm text-danger">{err}</p> : null}
       {rows === null ? (
         <p className="mt-6 text-sm text-muted">Carregando academias…</p>
-      ) : rows.length === 0 ? (
-        <p className="mt-6 text-sm text-muted">Nenhuma academia cadastrada ainda.</p>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-lg border border-border">
+        <>
+          <div className="mt-6 max-w-xl">
+            <Field label="Buscar academia">
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome, e-mail ou Fênix" />
+            </Field>
+            <p className="mt-2 text-xs text-subtle">
+              {rows.length} academia{rows.length === 1 ? "" : "s"} no TatameSmart
+            </p>
+          </div>
+          {(() => {
+            const term = q.trim().toLowerCase();
+            const shown = term
+              ? rows.filter(
+                  (r) =>
+                    r.name.toLowerCase().includes(term) ||
+                    r.email.toLowerCase().includes(term) ||
+                    r.userId.toLowerCase().includes(term),
+                )
+              : rows;
+            if (!shown.length) {
+              return <p className="mt-6 text-sm text-muted">Nenhuma academia com esse nome.</p>;
+            }
+            return (
+        <div className="mt-4 overflow-x-auto rounded-lg border border-border">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="border-b border-border bg-surface text-xs text-muted">
               <tr>
@@ -128,7 +150,7 @@ function EmpresaBody() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {shown.map((r) => {
                 const m = membership(r);
                 return (
                   <tr key={r.userId} className="border-b border-border last:border-0 align-top">
@@ -174,10 +196,10 @@ function EmpresaBody() {
             </tbody>
           </table>
         </div>
+            );
+          })()}
+        </>
       )}
-      {rows && rows.length > 0 ? (
-        <p className="mt-3 text-xs text-subtle">{rows.length} academia{rows.length === 1 ? "" : "s"} no sistema</p>
-      ) : null}
     </>
   );
 }
