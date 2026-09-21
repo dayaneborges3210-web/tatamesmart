@@ -3,7 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { academyOf } from "@/lib/academy-actor";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { mpConfigured, mpFetch } from "@/lib/mp";
+import { mpConfigured, mpFetch, saveMpAccessToken } from "@/lib/mp";
 import { isMaeEmail, SITE_URL } from "@/lib/site";
 
 export const SAAS_PRICE_CENTS = { completo: 9900 } as const;
@@ -122,6 +122,16 @@ export const saasDeskFn = createServerFn({ method: "GET" })
     return deskOf(userId);
   });
 
+export const saveMpBootstrapFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { token: string }) => d)
+  .handler(async ({ context, data }) => {
+    const userId = await requireOwner(context.userId);
+    if (await mpConfigured()) throw new Error("O Mercado Pago já está ligado.");
+    await saveMpAccessToken(data.token);
+    return deskOf(userId);
+  });
+
 export const saasCheckoutFn = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: { plan: SaasPlan; method: SaasMethod; returnUrl?: string }) => d)
@@ -163,8 +173,9 @@ export const saasCheckoutFn = createServerFn({ method: "POST" })
               transaction_amount: amountCents / 100,
               currency_id: "BRL",
             },
-            back_url: `${origin}/assinatura?pagamento=ok`,
+            back_url: `${origin}/?pagar=1&pagamento=ok`,
             status: "pending",
+            notification_url: `${SITE_URL}/api/billing-webhook`,
           }),
         },
       );
@@ -194,9 +205,9 @@ export const saasCheckoutFn = createServerFn({ method: "POST" })
           payer: { email: email || undefined, name: school[0]?.name || user[0]?.name || "Academia" },
           payment_methods: { excluded_payment_types: excluded, installments: 1 },
           back_urls: {
-            success: `${origin}/assinatura?pagamento=ok`,
-            failure: `${origin}/assinatura?pagamento=falhou`,
-            pending: `${origin}/assinatura?pagamento=pendente`,
+            success: `${origin}/?pagar=1&pagamento=ok`,
+            failure: `${origin}/?pagar=1&pagamento=falhou`,
+            pending: `${origin}/?pagar=1&pagamento=pendente`,
           },
           auto_return: "approved",
           notification_url: `${SITE_URL}/api/billing-webhook`,

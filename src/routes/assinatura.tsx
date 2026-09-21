@@ -1,8 +1,8 @@
 import { Navigate, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Shell } from "@/components/shell";
-import { Badge, Button } from "@/components/ui";
-import { saasCheckoutFn, saasConfirmFn, saasDeskFn, type SaasDesk, type SaasPlan } from "@/lib/saas-billing";
+import { Badge, Button, Field, PasswordInput } from "@/components/ui";
+import { saasCheckoutFn, saasConfirmFn, saasDeskFn, saveMpBootstrapFn, type SaasDesk, type SaasPlan } from "@/lib/saas-billing";
 import { PLANS } from "@/lib/plans";
 import { isMaeEmail } from "@/lib/site";
 import { useCurrentUser, useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -34,6 +34,7 @@ export function AssinaturaBody() {
   const [desk, setDesk] = useState<SaasDesk | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
+  const [mpToken, setMpToken] = useState("");
 
   useEffect(() => {
     try {
@@ -63,7 +64,7 @@ export function AssinaturaBody() {
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : "Não confirmou o pagamento."))
       .finally(() => {
         try {
-          history.replaceState({}, "", "/assinatura");
+          history.replaceState({}, "", "/?pagar=1");
         } catch {
           /* ignore */
         }
@@ -126,9 +127,34 @@ export function AssinaturaBody() {
           </div>
 
           {!desk.configured ? (
-            <p className="mt-4 rounded-lg border border-warning/40 bg-surface px-4 py-3 text-sm text-muted">
-              O Mercado Pago ainda não está ligado no servidor da TatameSmart.
-            </p>
+            <form
+              className="mt-4 rounded-lg border border-warning/40 bg-surface p-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setBusy("token");
+                setErr("");
+                void saveMpBootstrapFn({ data: { token: mpToken } })
+                  .then((next) => {
+                    setDesk(next);
+                    setMpToken("");
+                  })
+                  .catch((e: unknown) => setErr(e instanceof Error ? e.message : "Não salvou o token."))
+                  .finally(() => setBusy(""));
+              }}
+            >
+              <p className="text-sm font-medium">Ligar Mercado Pago</p>
+              <p className="mt-1 text-sm text-muted">
+                Cole o Access Token de produção (começa com APP_USR-). Não crie plano na documentação.
+              </p>
+              <div className="mt-3">
+                <Field label="Access Token">
+                  <PasswordInput value={mpToken} onChange={(e) => setMpToken(e.target.value)} autoComplete="off" />
+                </Field>
+              </div>
+              <Button className="mt-3" type="submit" disabled={busy !== "" || mpToken.trim().length < 20}>
+                {busy === "token" ? "Ligando…" : "Salvar e ligar cobrança"}
+              </Button>
+            </form>
           ) : null}
 
           <div className="mt-6 max-w-xl">
