@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Shell } from "@/components/shell";
-import { Button, Field, Input, PasswordInput } from "@/components/ui";
+import { Badge, Button, Field, Input, PasswordInput } from "@/components/ui";
 import { DEFAULT_CHARGE_TEXTS, phaseLabel, type ChargePhase } from "@/lib/cobranca";
 import { BRANDS } from "@/lib/brands";
 import { cn } from "@/lib/cn";
@@ -11,6 +11,9 @@ import { printA4 } from "@/lib/thermal";
 import { waQrClient, waTestClient, waStateClient } from "@/lib/wa-client";
 import { changePasswordFn } from "@/lib/change-password";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { isMaeEmail } from "@/lib/site";
+import { saasCheckoutFn, saasConfirmFn, saasDeskFn, type SaasDesk } from "@/lib/saas-billing";
+import { formatDatePt } from "@/lib/money";
 
 export const Route = createFileRoute("/configuracoes")({ component: ConfigPage });
 
@@ -46,7 +49,8 @@ function ConfigBody() {
   } = useDojo();
   const user = useCurrentUser();
   const staff = role === "staff";
-  const [tab, setTab] = useState<"academia" | "seguranca" | "filiais">("academia");
+  const showPlan = !staff && !isMaeEmail(user?.primaryEmail);
+  const [tab, setTab] = useState<"academia" | "plano" | "seguranca" | "filiais">("academia");
   const unitId = lockedBranchId || branchId;
   const unitName = branches.find((b) => b.id === unitId)?.name || "esta unidade";
   const [name, setName] = useState(school);
@@ -149,6 +153,18 @@ function ConfigBody() {
         >
           Academia
         </button>
+        {showPlan ? (
+          <button
+            type="button"
+            className={cn(
+              "min-h-11 rounded-md border px-4 text-sm",
+              tab === "plano" ? "border-fg bg-surface text-fg" : "border-border text-muted hover:text-fg",
+            )}
+            onClick={() => setTab("plano")}
+          >
+            Plano TatameSmart
+          </button>
+        ) : null}
         <button
           type="button"
           className={cn(
@@ -172,6 +188,8 @@ function ConfigBody() {
         </button>
         ) : null}
       </div>
+
+      {tab === "plano" ? <PlanTab /> : null}
 
       {tab === "seguranca" ? (
         <SecurityTab email={user?.primaryEmail || ""} />
@@ -697,6 +715,77 @@ function BranchesTab() {
           {busy ? "Salvando…" : "Adicionar filial"}
         </Button>
       </form>
+    </section>
+  );
+}
+
+function PlanTab() {
+  const [desk, setDesk] = useState<SaasDesk | null>(null);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void saasDeskFn()
+      .then(setDesk)
+      .catch((e: unknown) => setErr(e instanceof Error ? e.message : "Não carregou o plano."));
+    const q = new URLSearchParams(window.location.search);
+    const pagamento = q.get("pagamento");
+    const id = q.get("payment_id") || q.get("collection_id") || "";
+    if (pagamento || id) {
+      void saasConfirmFn({ data: { paymentId: id } })
+        .then(setDesk)
+        .catch(() => undefined)
+        .finally(() => history.replaceState({}, "", "/configuracoes"));
+    }
+  }, []);
+
+  async function payPix() {
+    setBusy(true);
+    setErr("");
+    try {
+      const out = await saasCheckoutFn({
+        data: { plan: "completo", method: "pix", returnUrl: window.location.origin + "/configuracoes" },
+      });
+      window.location.assign(out.checkoutUrl);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Não abriu o Pix.");
+      setBusy(false);
+    }
+  }
+
+  if (!desk) {
+    return <p className="mt-8 text-sm text-muted">{err || "Carregando plano…"}</p>;
+  }
+
+  const label =
+    desk.access === "vitalicio"
+      ? "Vitalício"
+      : desk.plan === "completo" && desk.paidUntil
+        ? `Completo até ${formatDatePt(desk.paidUntil)}`
+        : "Trial";
+
+  return (
+    <section className="mt-8 max-w-xl rounded-lg border border-border bg-surface p-5">
+      <h2 className="text-sm font-medium">Plano TatameSmart</h2>
+      <p className="mt-2 text-2xl font-semibold tracking-tight">R$ 99,00 <span className="text-sm font-normal text-muted">/mês</span></p>
+      <p className="mt-2 text-sm text-muted">
+        Sem débito automático. Todo mês o professor paga o Pix quando quiser renovar.
+      </p>
+      <div className="mt-4 flex items-center gap-2">
+        <span className="text-xs text-muted">Situação</span>
+        <Badge tone={desk.access === "vitalicio" || desk.plan === "completo" ? "success" : "warning"}>{label}</Badge>
+      </div>
+      {err ? <p className="mt-3 text-sm text-danger">{err}</p> : null}
+      {desk.access === "vitalicio" ? (
+        <p className="mt-4 text-sm text-muted">Esta academia está no vitalício.</p>
+      ) : (
+        <Button className="mt-5" type="button" disabled={busy || !desk.configured} onClick={() => void payPix()}>
+          {busy ? "Abrindo Pix…" : "Pagar este mês no Pix"}
+        </Button>
+      )}
+      {!desk.configured ? (
+        <p className="mt-3 text-sm text-muted">O Pix abre quando a TatameSmart liga o Mercado Pago.</p>
+      ) : null}
     </section>
   );
 }
