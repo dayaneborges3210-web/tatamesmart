@@ -8,30 +8,13 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { invoiceStatus, phaseFor, phaseLabel } from "@/lib/cobranca";
 import { useDojo } from "@/lib/dojo-store";
 import { brl, classHours, daysUntil, formatDatePt, todayISO, weekdayPt } from "@/lib/money";
-import { isMaeEmail } from "@/lib/site";
-import { isDemoEmail } from "@/lib/demo";
-import { AssinaturaBody } from "@/routes/assinatura";
 
 export const Route = createFileRoute("/")({
-  validateSearch: (s: Record<string, unknown>): { pagar?: "1" } => {
-    if (s.pagar === "1" || s.pagar === 1 || s.pagar === true) return { pagar: "1" };
-    return {};
-  },
   component: Home,
 });
 
-function shouldOpenPay(pagar?: "1") {
-  if (pagar === "1") return true;
-  try {
-    return localStorage.getItem("tatamesmart-pagar") === "1";
-  } catch {
-    return false;
-  }
-}
-
 function Home() {
   const { user } = useCurrentUserState();
-  const search = Route.useSearch();
 
   useEffect(() => {
     if (user || !getBearerToken()) return;
@@ -50,13 +33,9 @@ function Home() {
   }, [user]);
 
   if (user) {
-    const pay =
-      shouldOpenPay(search.pagar) &&
-      !isMaeEmail(user.primaryEmail) &&
-      !isDemoEmail(user.primaryEmail);
     return (
       <Shell>
-        {pay ? <AssinaturaBody /> : <Dashboard />}
+        <Dashboard />
       </Shell>
     );
   }

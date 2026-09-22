@@ -16,23 +16,7 @@ export const Route = createFileRoute("/login")({
   component: Login,
 });
 
-function afterLogin(kind: "entrar" | "criar") {
-  if (kind === "criar") {
-    try {
-      localStorage.setItem("tatamesmart-pagar", "1");
-    } catch {
-      /* ignore */
-    }
-    return "/?pagar=1";
-  }
-  try {
-    if (new URLSearchParams(window.location.search).get("criar") === "1") {
-      localStorage.setItem("tatamesmart-pagar", "1");
-      return "/?pagar=1";
-    }
-  } catch {
-    /* ignore */
-  }
+function afterLogin(_kind: "entrar" | "criar") {
   return "/";
 }
 
@@ -69,8 +53,6 @@ function Login() {
   const [busy, setBusy] = useState(false);
 
   if (user) {
-    const dest = afterLogin(search.criar === "1" ? "criar" : "entrar");
-    if (dest.includes("pagar=1")) return <Navigate to="/" search={{ pagar: "1" }} />;
     return <Navigate to="/" />;
   }
 
