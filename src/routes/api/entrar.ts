@@ -6,26 +6,16 @@ import { SITE_DOMAIN } from "@/lib/site";
 
 function originOk(request: Request) {
   const origin = request.headers.get("origin");
-  const host = (request.headers.get("host") || "").split(":")[0];
+  const host = (request.headers.get("host") || "").split(":")[0].toLowerCase();
   if (!origin) return true;
-  if (
-    host.endsWith(".grok-sandbox.com") ||
-    host.endsWith(".grok.me") ||
-    host === "localhost" ||
-    host === "127.0.0.1"
-  ) {
-    return true;
-  }
   try {
-    const h = new URL(origin).hostname;
-    return (
-      h === SITE_DOMAIN ||
-      h === `www.${SITE_DOMAIN}` ||
-      h.endsWith(".grok.me") ||
-      h.endsWith(".grok-sandbox.com") ||
-      h === "localhost" ||
-      h === "127.0.0.1"
-    );
+    const h = new URL(origin).hostname.toLowerCase();
+    if (h === host) return true;
+    if (h === SITE_DOMAIN || h === `www.${SITE_DOMAIN}`) return true;
+    if (h.endsWith(".vercel.app") || h === "vercel.app") return true;
+    if (h.endsWith(".grok-sandbox.com") || h.endsWith(".grok.me")) return true;
+    if (h === "localhost" || h === "127.0.0.1") return true;
+    return false;
   } catch {
     return false;
   }

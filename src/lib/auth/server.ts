@@ -118,6 +118,11 @@ const LOCAL_DEV_ORIGINS: string[] = [
 ];
 const publicHosts: string[] = [SITE_DOMAIN, "www." + SITE_DOMAIN];
 if (explicitHost && !publicHosts.includes(explicitHost)) publicHosts.push(explicitHost);
+for (const key of ["VERCEL_URL", "VERCEL_PROJECT_PRODUCTION_URL"] as const) {
+  const raw = (env(key) || "").replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+  if (raw && !publicHosts.includes(raw)) publicHosts.push(raw);
+}
+if (!publicHosts.includes("tatamesmart.vercel.app")) publicHosts.push("tatamesmart.vercel.app");
 // Always derive origin from the request host so Google returns to
 // smarttatame.com.br (not only the grok.me URL the deployer injects).
 const baseURL = {

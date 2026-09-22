@@ -20,8 +20,8 @@ export function loginErrorMessage(err: unknown, kind: "entrar" | "criar" | "oaut
   if (m.includes("too many") || m.includes("try again later") || m.includes("429")) {
     return "Muitas tentativas. Espere 20 segundos e clique uma vez só.";
   }
-  if (m.includes("origin")) {
-    return "O endereço ainda está ligando o cadastro. Espere um minuto e clique de novo.";
+  if (m.includes("origin") || m.includes("origem")) {
+    return raw || "Este endereço ainda não estava liberado. Recarregue e crie de novo.";
   }
   if (m.includes("exist") || m.includes("already")) {
     return "Esse e-mail já tem academia. Clique em Já tenho conta.";
