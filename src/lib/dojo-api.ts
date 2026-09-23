@@ -1321,7 +1321,10 @@ export const markPaidFn = createServerFn({ method: "POST" })
   .validator((id: string) => id)
   .handler(async ({ context, data: invoiceId }) => {
     const sql = await getSql();
-    await sql`update invoices set status = ${"paga"} where id = ${invoiceId} and user_id = ${context.userId}`;
+    await sql.query(`alter table invoices add column if not exists paid_at timestamptz`);
+    const visible = await snapshot(context.userId, context.sessionUserId);
+    if (!visible.invoices.some((invoice) => invoice.id === invoiceId && (!context.lockedBranchId || (invoice.branchId || visible.students.find((student) => student.id === invoice.studentId)?.branchId) === context.lockedBranchId))) throw new Error("Mensalidade não encontrada nesta unidade.");
+    await sql`update invoices set status = ${"paga"}, paid_at = coalesce(paid_at, now()) where id = ${invoiceId} and user_id = ${context.userId}`;
     return snapshot(context.userId, context.sessionUserId);
   });
 

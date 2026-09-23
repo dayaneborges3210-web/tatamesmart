@@ -190,3 +190,13 @@ export function instanceNameForBranch(ownerUserId: string, branchId: string) {
   if (!ownerUserId || !branchId) throw new Error("Unidade não identificada.");
   return `tsb${createHash("sha256").update(`${ownerUserId}|${branchId}`).digest("hex").slice(0, 40)}`;
 }
+
+export async function sendWhatsAppDocument(opts: { url: string; instance: string; token: string; to: string; media: string; fileName: string }) {
+  const number = waDigits(opts.to);
+  if (number.length < 12) throw new Error("Cadastre o WhatsApp completo do aluno antes de enviar.");
+  if (await evolutionState(opts) !== "open") throw new Error("Conecte o WhatsApp desta academia antes de enviar o recibo.");
+  return evoJson(`${normalizeEvolutionUrl(opts.url)}/message/sendMedia/${encodeURIComponent(opts.instance)}`, {
+    method: "POST", headers: evoHeaders(opts.token),
+    body: JSON.stringify({ number, mediatype: "document", mimetype: "application/pdf", media: opts.media, fileName: opts.fileName, caption: "Seu recibo de quitação da mensalidade." }),
+  });
+}

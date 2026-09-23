@@ -12,7 +12,7 @@ import {
 } from "@/lib/cobranca";
 import { useDojo } from "@/lib/dojo-store";
 import { brl, daysUntil, formatDatePt, monthLabel, todayISO } from "@/lib/money";
-import { printA4, receiptMensalidade } from "@/lib/thermal";
+import { invoiceReceiptFn, sendInvoiceReceiptFn } from "@/lib/invoice-receipt";
 
 export const Route = createFileRoute("/mensalidades")({ component: MensalidadesPage });
 
@@ -34,6 +34,46 @@ export function MensalidadesPage() {
 function CobrancaBody() {
   const { invoices, students, school, pix, reminders, markPaid, markReminderSent, chargeTexts, waReady, waAuto, dispatchToday, branches } =
     useDojo();
+  const [receiptId, setReceiptId] = useState<string | null>(null);
+  const [receiptBusy, setReceiptBusy] = useState(false);
+  const [receiptInfo, setReceiptInfo] = useState("");
+  const [receiptSent, setReceiptSent] = useState(false);
+  const [payingId, setPayingId] = useState<string | null>(null);
+  function chooseReceipt(id: string) { setReceiptId(id); setReceiptInfo(""); setReceiptSent(false); }
+  async function settle(id: string) {
+    setPayingId(id);
+    setSendInfo("");
+    try { await markPaid(id); chooseReceipt(id); }
+    catch (error) { setSendInfo(error instanceof Error ? error.message : "Não foi possível confirmar a baixa."); }
+    finally { setPayingId(null); }
+  }
+  async function printReceipt() {
+    if (!receiptId) return;
+    const popup = window.open("", "_blank");
+    if (!popup) { setReceiptInfo("Permita a abertura da janela para imprimir o PDF."); return; }
+    popup.opener = null;
+    setReceiptBusy(true);
+    try {
+      const { pdf } = await invoiceReceiptFn({ data: { invoiceId: receiptId } });
+      const bytes = Uint8Array.from(atob(pdf), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      popup.location.replace(url);
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      setReceiptInfo("PDF aberto. Use o botão de impressão do visualizador.");
+    } catch (error) { popup.close(); setReceiptInfo(error instanceof Error ? error.message : "Falha ao gerar PDF."); }
+    finally { setReceiptBusy(false); }
+  }
+  async function sendReceipt() {
+    if (!receiptId) return;
+    setReceiptBusy(true);
+    setReceiptInfo("");
+    try {
+      await sendInvoiceReceiptFn({ data: { invoiceId: receiptId } });
+      setReceiptSent(true);
+      setReceiptInfo("Recibo PDF aceito pela conexão WhatsApp da academia para envio ao aluno.");
+    } catch (error) { setReceiptInfo(`${error instanceof Error ? error.message : "Falha no envio."} A baixa permanece salva. Confira a conversa antes de tentar novamente.`); }
+    finally { setReceiptBusy(false); }
+  }
   const today = todayISO();
   const [preview, setPreview] = useState<ChargePhase>("inicio");
   const [sending, setSending] = useState(false);
@@ -68,6 +108,19 @@ function CobrancaBody() {
 
   return (
     <>
+      {receiptId ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <section role="dialog" aria-modal="true" aria-labelledby="receipt-title" className="w-full max-w-lg rounded-lg border border-border bg-surface p-6">
+          <h2 id="receipt-title" className="text-xl font-semibold">Mensalidade quitada</h2>
+          <p className="mt-2 text-sm text-muted">Como deseja entregar o recibo?</p>
+          <p className="mt-2 text-sm">{students.find((student) => student.id === invoices.find((invoice) => invoice.id === receiptId)?.studentId)?.name} · {students.find((student) => student.id === invoices.find((invoice) => invoice.id === receiptId)?.studentId)?.phone || "Aluno sem WhatsApp cadastrado"}</p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Button type="button" disabled={receiptBusy} onClick={() => void printReceipt()}>Imprimir recibo</Button>
+            <Button type="button" disabled={receiptBusy || receiptSent} onClick={() => void sendReceipt()}>{receiptSent ? "Envio solicitado" : receiptBusy ? "Aguarde…" : "Enviar PDF premium pelo WhatsApp"}</Button>
+            <Button type="button" variant="ghost" disabled={receiptBusy} onClick={() => setReceiptId(null)}>Fechar</Button>
+          </div>
+          {receiptInfo ? <p role="status" className="mt-4 text-sm">{receiptInfo}</p> : null}
+        </section>
+      </div> : null}
       <p className="text-xs font-medium uppercase tracking-wide text-muted">Cobrança</p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Mensalidades</h1>
       <p className="mt-1 max-w-2xl text-sm text-muted">
@@ -166,21 +219,10 @@ function CobrancaBody() {
                     <Button
                       type="button"
                       variant="ghost"
-                      onClick={() => {
-                        void markPaid(row.inv.id);
-                        printA4(
-                          receiptMensalidade({
-                            school,
-                            aluno: student.name,
-                            month: monthLabel(row.inv.month),
-                            amount: brl(row.inv.amount),
-                            due: formatDatePt(row.inv.due),
-                            paidAt: formatDatePt(today),
-                          }),
-                        );
-                      }}
+                      disabled={payingId !== null}
+                      onClick={() => void settle(row.inv.id)}
                     >
-                      Baixar e imprimir
+                      {payingId === row.inv.id ? "Confirmando…" : "Dar baixa"}
                     </Button>
                   </div>
                 </li>
@@ -219,6 +261,9 @@ function CobrancaBody() {
                     <Badge tone={tone}>{row.status}</Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
+                    <Button type="button" variant="ghost" disabled={payingId !== null} onClick={() => row.status === "paga" ? chooseReceipt(row.inv.id) : void settle(row.inv.id)}>
+                      {row.status === "paga" ? "Recibo" : payingId === row.inv.id ? "Confirmando…" : "Dar baixa"}
+                    </Button>
                     {row.status !== "paga" && row.student && row.phase ? (
                       <a
                         href={waLink(
