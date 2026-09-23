@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Building2, CalendarCheck, CreditCard, LayoutGrid, Users, Dumbbell, Wallet, CalendarClock, Settings, UserRound, Package, BarChart3, ShoppingBag, Trophy, LogOut, Layers } from "lucide-react";
+import { Building2, CalendarCheck, CreditCard, LayoutGrid, Users, Dumbbell, Wallet, CalendarClock, Settings, UserRound, Package, BarChart3, ShoppingBag, Trophy, LogOut, Layers, MessageCircle } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { signOut } from "@/lib/auth/client";
@@ -97,6 +97,16 @@ function ShellInner({ children }: { children: ReactNode }) {
           </Link>
         );
       })}
+      <a
+        href="https://wa.me/5562992289560"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Suporte pelo WhatsApp (abre em nova aba)"
+        className="flex min-h-11 items-center gap-3 rounded-sm px-3 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-fg"
+      >
+        <MessageCircle className="size-4 shrink-0" strokeWidth={1.75} />
+        Suporte
+      </a>
     </nav>
   );
 
