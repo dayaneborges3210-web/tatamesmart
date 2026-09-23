@@ -71,6 +71,7 @@ function AlunosBody() {
   const [planId, setPlanId] = useState("");
   const [dueDay, setDueDay] = useState(10);
   const [trial, setTrial] = useState(false);
+  const [scholarship, setScholarship] = useState(false);
   const [docs, setDocs] = useState<string[]>([]);
   const [unitId, setUnitId] = useState("");
 
@@ -105,6 +106,7 @@ function AlunosBody() {
     setPlanId("");
     setDueDay(10);
     setTrial(false);
+    setScholarship(false);
     setDocs([]);
     setUnitId(branchId);
     setEditingId(null);
@@ -128,6 +130,7 @@ function AlunosBody() {
     setPlanId(s.planId);
     setDueDay(s.dueDay || 10);
     setTrial(s.status === "trial");
+    setScholarship(Boolean(s.scholarship));
     setDocs([...s.docs]);
     setUnitId(s.branchId || branchId);
     setFicha(null);
@@ -270,6 +273,7 @@ function AlunosBody() {
                 hasHealth,
                 healthNote,
                 birth,
+                scholarship,
                 planId,
                 dueDay,
                 docs,
@@ -384,6 +388,11 @@ function AlunosBody() {
               <Field label="Nascimento">
                 <Input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} />
               </Field>
+              <label className="flex min-h-11 items-center gap-2 rounded-sm border border-border p-3 text-sm">
+                <input type="checkbox" checked={scholarship} onChange={(e) => setScholarship(e.target.checked)} />
+                Bolsa integral — 100% gratuita
+              </label>
+              {scholarship ? <p className="text-sm text-muted">Não gera mensalidade nem lembretes de cobrança. Cobranças pendentes ficam suspensas enquanto a bolsa estiver marcada; pagamentos anteriores são preservados.</p> : null}
               <Field label="Plano">
                 <select
                   className="min-h-11 w-full rounded-sm border border-border bg-bg px-3 text-sm text-fg"
@@ -494,6 +503,7 @@ function AlunosBody() {
                 value={ficha.hasHealth ? ficha.healthNote || "Possui restrição" : "Nenhum informado"}
               />
               <Row label="Faixa" value={formatBelt(ficha.belt, ficha.degree)} />
+              <Row label="Bolsa integral" value={ficha.scholarship ? "Sim — 100% gratuita" : "Não"} />
               <Row label="Plano" value={plans.find((p) => p.id === ficha.planId)?.name ?? "—"} />
               <Row label="Vencimento" value={`Todo dia ${ficha.dueDay || 10}`} />
               <Row label="Nascimento" value={ficha.birth ? formatDatePt(ficha.birth) : "—"} />

@@ -324,6 +324,7 @@ export function DojoProvider({ children }: { children: ReactNode }) {
             hasHealth: input.hasHealth,
             healthNote: input.healthNote,
             birth: input.birth,
+            scholarship: input.scholarship,
             planId: input.planId,
             dueDay: input.dueDay,
             docs: input.docs,

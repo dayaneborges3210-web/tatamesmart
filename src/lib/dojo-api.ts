@@ -1,3 +1,4 @@
+import { includeScholarshipInvoice } from "./scholarship";
 import { randomBytes } from "node:crypto";
 import { hashPassword } from "better-auth/crypto";
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
@@ -110,6 +111,7 @@ async function ensureAcademyExtras() {
   if (!g.__academyExtras__) {
     g.__academyExtras__ = (async () => {
       const sql = await getSql();
+      await sql.query(`alter table students add column if not exists scholarship boolean not null default false`);
       await sql.query(`
         create table if not exists plans (
           id text primary key,
@@ -299,6 +301,7 @@ async function snapshot(userId: string, sessionUserId = userId): Promise<DojoSna
     /* column already there */
   }
   const studentRows = await sql<{
+    scholarship: boolean;
     id: string;
     name: string;
     phone: string;
@@ -318,7 +321,7 @@ async function snapshot(userId: string, sessionUserId = userId): Promise<DojoSna
     due_day: number | null;
     docs: string | null;
     branch_id: string | null;
-  }>`select id, name, phone, modality, belt, class_id, status, joined, cpf, address, cep, has_health, health_note, degree, birth, plan_id, due_day, docs, branch_id from students where user_id = ${userId} order by name`;
+  }>`select scholarship, id, name, phone, modality, belt, class_id, status, joined, cpf, address, cep, has_health, health_note, degree, birth, plan_id, due_day, docs, branch_id from students where user_id = ${userId} order by name`;
   const invRows = await sql<{
     id: string;
     student_id: string;
@@ -426,7 +429,7 @@ async function snapshot(userId: string, sessionUserId = userId): Promise<DojoSna
     planRows = [];
   }
 
-  const invoices: Invoice[] = invRows.map((row) => {
+  const invoices: Invoice[] = invRows.filter((row) => includeScholarshipInvoice(row.status, studentRows.some((student) => student.id === row.student_id && student.scholarship))).map((row) => {
     const inv: Invoice = {
       id: row.id,
       studentId: row.student_id,
@@ -469,6 +472,7 @@ async function snapshot(userId: string, sessionUserId = userId): Promise<DojoSna
       branchId: c.branch_id || "",
     })),
     students: studentRows.map((s) => ({
+      scholarship: Boolean(s.scholarship),
       id: s.id,
       name: s.name,
       phone: s.phone,
@@ -930,6 +934,7 @@ async function dispatchToday(userId: string, sessionUserId = userId) {
     if (!phase) continue;
     if (snap.reminders.some((r) => r.invoiceId === inv.id && r.date === today)) continue;
     const student = snap.students.find((s) => s.id === inv.studentId);
+    if (student?.scholarship) continue;
     if (!student?.phone) {
       failed += 1;
       errors.push("Aluno sem WhatsApp.");
@@ -1107,6 +1112,7 @@ export const addStudentFn = createServerFn({ method: "POST" })
       hasHealth: boolean;
       healthNote: string;
       birth?: string;
+      scholarship?: boolean;
       planId?: string;
       dueDay?: number;
       docs?: string[];
@@ -1138,9 +1144,9 @@ export const addStudentFn = createServerFn({ method: "POST" })
     const docs = parseDocs((data.docs ?? []).join(",")).join(",");
     const status = data.trial ? "trial" : "ativo";
     const planId = plan?.id ?? "";
-    await sql`insert into students (id, user_id, name, phone, modality, belt, degree, class_id, status, joined, cpf, address, cep, has_health, health_note, birth, plan_id, due_day, docs, branch_id)
-      values (${id}, ${context.userId}, ${data.name}, ${data.phone}, ${data.modality}, ${data.belt}, ${degree}, ${data.classId}, ${status}, ${t}, ${cpf}, ${address}, ${cep}, ${hasHealth}, ${healthNote}, ${birth}, ${planId}, ${dueDay}, ${docs}, ${branchId})`;
-    await sql`insert into invoices (id, user_id, student_id, month, amount, status, due, branch_id)
+    await sql`insert into students (id, user_id, name, phone, modality, belt, degree, class_id, status, joined, cpf, address, cep, has_health, health_note, birth, plan_id, due_day, docs, branch_id, scholarship)
+      values (${id}, ${context.userId}, ${data.name}, ${data.phone}, ${data.modality}, ${data.belt}, ${degree}, ${data.classId}, ${status}, ${t}, ${cpf}, ${address}, ${cep}, ${hasHealth}, ${healthNote}, ${birth}, ${planId}, ${dueDay}, ${docs}, ${branchId}, ${data.scholarship === true})`;
+    if (data.scholarship !== true) await sql`insert into invoices (id, user_id, student_id, month, amount, status, due, branch_id)
       values (${`inv-${id}`}, ${context.userId}, ${id}, ${due.slice(0, 7)}, ${amount}, ${"aberta"}, ${due}, ${branchId})`;
     return snapshot(context.userId, context.sessionUserId);
   });
@@ -1162,6 +1168,7 @@ export const saveStudentFn = createServerFn({ method: "POST" })
       hasHealth?: boolean;
       healthNote?: string;
       birth?: string;
+      scholarship?: boolean;
       planId?: string;
       dueDay?: number;
       docs?: string[];
@@ -1189,6 +1196,9 @@ export const saveStudentFn = createServerFn({ method: "POST" })
       const classId = (data.classId ?? "").slice(0, 80);
       await sql`update students set name = ${name}, phone = ${(data.phone ?? "").slice(0, 20)}, cpf = ${cpf}, cep = ${cep}, address = ${address}, has_health = ${hasHealth}, health_note = ${healthNote}, belt = ${belt}, degree = ${degree}, modality = ${modality}, class_id = ${classId}, birth = ${birth}
         where id = ${data.id} and user_id = ${context.userId}`;
+    }
+    if (data.scholarship !== undefined) {
+      await sql`update students set scholarship = ${data.scholarship === true} where id = ${data.id} and user_id = ${context.userId}`;
     }
     if (data.docs) {
       const docs = parseDocs(data.docs.join(",")).join(",");
@@ -1320,6 +1330,9 @@ export const markReminderFn = createServerFn({ method: "POST" })
   .validator((d: { invoiceId: string; phase: ReminderSend["phase"] }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    await ensureAcademyExtras();
+    const exempt = await sql<{ id: string }>`select i.id from invoices i join students s on s.id = i.student_id and s.user_id = i.user_id where i.id = ${data.invoiceId} and i.user_id = ${context.userId} and s.scholarship = true`;
+    if (exempt.length) throw new Error("Aluno com bolsa integral não recebe cobrança.");
     const date = todayISO();
     const existing = await sql<{ id: string }>`
       select id from reminders where user_id = ${context.userId} and invoice_id = ${data.invoiceId} and date = ${date}

@@ -51,6 +51,7 @@ export function isModality(v: string): v is Modality {
 }
 
 export type Student = {
+  scholarship?: boolean;
   id: string;
   name: string;
   phone: string;
