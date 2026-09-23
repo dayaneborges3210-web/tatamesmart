@@ -51,6 +51,14 @@ function ConfigBody() {
   const staff = role === "staff";
   const showPlan = !staff && !isMaeEmail(user?.primaryEmail);
   const [tab, setTab] = useState<"academia" | "plano" | "seguranca" | "filiais">("academia");
+  useEffect(() => {
+    const selectPlan = () => {
+      if (showPlan && (window.location.hash === "#plano" || new URLSearchParams(window.location.search).has("pagamento"))) setTab("plano");
+    };
+    selectPlan();
+    window.addEventListener("hashchange", selectPlan);
+    return () => window.removeEventListener("hashchange", selectPlan);
+  }, [showPlan]);
   const unitId = lockedBranchId || branchId;
   const unitName = branches.find((b) => b.id === unitId)?.name || "esta unidade";
   const [name, setName] = useState(school);
@@ -762,7 +770,7 @@ function PlanTab() {
       ? "Vitalício"
       : desk.plan === "completo" && desk.paidUntil
         ? `Completo até ${formatDatePt(desk.paidUntil)}`
-        : "Trial";
+        : "Teste gratuito";
 
   return (
     <section className="mt-8 max-w-xl rounded-lg border border-border bg-surface p-5">

@@ -14,6 +14,8 @@ import { daysUntil, todayISO } from "@/lib/money";
 import type { Branch } from "@/lib/dojo-types";
 import { activeBranches } from "@/lib/branch-scope";
 
+import { TrialBanner } from "@/components/trial-banner";
+
 const NAV = [
   { to: "/", label: "Painel", icon: LayoutGrid },
   { to: "/mensalidades", label: "Cobrança", icon: CreditCard },
@@ -143,6 +145,7 @@ function ShellInner({ children }: { children: ReactNode }) {
           </p>
         ) : null}
         <div className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
+          {!loading && !blocked && role !== "staff" && !isMaeEmail(user?.primaryEmail) && !isDemoEmail(user?.primaryEmail) && user ? <TrialBanner userId={user.id} /> : null}
           {blocked ? (
             <div className="rounded-lg border border-border bg-surface p-6">
               <h1 className="text-xl font-semibold">Acesso bloqueado</h1>

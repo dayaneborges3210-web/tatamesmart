@@ -6,6 +6,8 @@ import { getSql } from "@/lib/db";
 import { mpConfigured, mpFetch, saveMpAccessToken } from "@/lib/mp";
 import { isMaeEmail, SITE_URL } from "@/lib/site";
 
+import { trialNotice } from "./trial-notice";
+
 export const SAAS_PRICE_CENTS = { completo: 9900 } as const;
 export type SaasPlan = "completo";
 export type SaasMethod = "pix" | "card";
@@ -120,6 +122,21 @@ export const saasDeskFn = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const userId = await requireOwner(context.userId);
     return deskOf(userId);
+  });
+
+export const trialNoticeFn = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const actor = await academyOf(context.userId);
+    if (actor.isStaff) return null;
+    const sql = await getSql();
+    const rows = await sql<{ email: string; created: Date | string; billing_plan: string; access_status: string; paid_until: Date | string | null }>`
+      select u.email, u."createdAt" as created, s.billing_plan, s.access_status, s.paid_until
+      from schools s join "user" u on u.id = s.user_id where s.user_id = ${actor.ownerId}
+    `;
+    const row = rows[0];
+    if (!row || isMaeEmail(row.email) || row.access_status !== "ok" || row.billing_plan !== "trial" || row.paid_until) return null;
+    return trialNotice(row.created);
   });
 
 export const saveMpBootstrapFn = createServerFn({ method: "POST" })
