@@ -747,16 +747,16 @@ function PlanTab() {
     }
   }, []);
 
-  async function payPix() {
+  async function payMonth(method: "pix" | "card") {
     setBusy(true);
     setErr("");
     try {
       const out = await saasCheckoutFn({
-        data: { plan: "completo", method: "pix", returnUrl: window.location.origin + "/configuracoes" },
+        data: { plan: "completo", method, returnUrl: window.location.origin + "/configuracoes" },
       });
       window.location.assign(out.checkoutUrl);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Não abriu o Pix.");
+      setErr(e instanceof Error ? e.message : "Não foi possível abrir o pagamento.");
       setBusy(false);
     }
   }
@@ -777,7 +777,7 @@ function PlanTab() {
       <h2 className="text-sm font-medium">Plano TatameSmart</h2>
       <p className="mt-2 text-2xl font-semibold tracking-tight">R$ 99,00 <span className="text-sm font-normal text-muted">/mês</span></p>
       <p className="mt-2 text-sm text-muted">
-        Sem débito automático. Todo mês o professor paga o Pix quando quiser renovar.
+        Pague este mês com Pix ou cartão. Pagamento avulso de R$ 99,00, sem débito ou renovação automática.
       </p>
       <div className="mt-4 flex items-center gap-2">
         <span className="text-xs text-muted">Situação</span>
@@ -787,12 +787,17 @@ function PlanTab() {
       {desk.access === "vitalicio" ? (
         <p className="mt-4 text-sm text-muted">Esta academia está no vitalício.</p>
       ) : (
-        <Button className="mt-5" type="button" disabled={busy || !desk.configured} onClick={() => void payPix()}>
-          {busy ? "Abrindo Pix…" : "Pagar este mês no Pix"}
-        </Button>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Button type="button" disabled={busy || !desk.configured} onClick={() => void payMonth("pix")}>
+            {busy ? "Abrindo pagamento…" : "Pagar este mês no Pix"}
+          </Button>
+          <Button type="button" disabled={busy || !desk.configured} onClick={() => void payMonth("card")}>
+            {busy ? "Abrindo pagamento…" : "Pagar este mês com cartão"}
+          </Button>
+        </div>
       )}
       {!desk.configured ? (
-        <p className="mt-3 text-sm text-muted">O Pix abre quando a TatameSmart liga o Mercado Pago.</p>
+        <p className="mt-3 text-sm text-muted">O pagamento fica disponível quando a TatameSmart liga o Mercado Pago.</p>
       ) : null}
     </section>
   );

@@ -174,36 +174,10 @@ export const saasCheckoutFn = createServerFn({ method: "POST" })
     const origin = backUrl(data.returnUrl);
     const title = "TatameSmart Completo — R$ 99,00 por mês";
     const email = (user[0]?.email || "").trim();
-    if (method === "card") {
-      if (!email.includes("@")) throw new Error("A academia precisa de e-mail para assinar no cartão.");
-      const sub = await mpFetch<{ id: string; init_point?: string; status?: string }>(
-        "/preapproval",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            reason: title,
-            external_reference: `${userId}:${plan}:${id}`,
-            payer_email: email,
-            auto_recurring: {
-              frequency: 1,
-              frequency_type: "months",
-              transaction_amount: amountCents / 100,
-              currency_id: "BRL",
-            },
-            back_url: `${origin}/configuracoes?pagamento=ok`,
-            status: "pending",
-            notification_url: `${SITE_URL}/api/billing-webhook`,
-          }),
-        },
-      );
-      const checkoutUrl = sub.init_point;
-      if (!checkoutUrl) throw new Error("O Mercado Pago não devolveu o link da assinatura.");
-      await sql`
-        update saas_payments set preference_id = ${sub.id}, checkout_url = ${checkoutUrl} where id = ${id}
-      `;
-      return { paymentId: id, checkoutUrl, plan, method, amountCents };
-    }
-    const excluded = [{ id: "credit_card" }, { id: "debit_card" }, { id: "ticket" }, { id: "atm" }];
+    // Both methods are one-time monthly payments; never create a preapproval.
+    const excluded = method === "pix"
+      ? [{ id: "credit_card" }, { id: "debit_card" }, { id: "ticket" }, { id: "atm" }]
+      : [{ id: "bank_transfer" }, { id: "ticket" }, { id: "atm" }];
     const preference = await mpFetch<{ id: string; init_point?: string; sandbox_init_point?: string }>(
       "/checkout/preferences",
       {
@@ -213,7 +187,7 @@ export const saasCheckoutFn = createServerFn({ method: "POST" })
             {
               id: `${plan}-monthly`,
               title,
-              description: "Assinatura mensal TatameSmart",
+              description: "Plano mensal TatameSmart — pagamento avulso, sem renovação automática",
               quantity: 1,
               currency_id: "BRL",
               unit_price: amountCents / 100,
