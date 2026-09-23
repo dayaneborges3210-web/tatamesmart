@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { trialNotice } from "./trial-notice.ts";
+import { academyReadOnly, trialNotice } from "./trial-notice.ts";
 
 test("seven calendar days in Brasilia, then overdue", () => {
   for (let day = 1; day <= 8; day++) {
@@ -17,4 +17,12 @@ test("changes at Brasilia midnight, not UTC midnight", () => {
   assert.equal(trialNotice(start, new Date("2026-09-23T02:59:00Z"))?.day, 1);
   assert.equal(trialNotice(start, new Date("2026-09-23T03:00:00Z"))?.day, 2);
   assert.equal(trialNotice("invalid"), null);
+});
+
+test("read-only begins on day eight; approved payment and lifetime release access", () => {
+  const row = { created: "2026-09-22T15:00:00Z", billing_plan: "trial", access_status: "ok", paid_until: null };
+  assert.equal(academyReadOnly(row, new Date("2026-09-29T02:59:59Z")), false);
+  assert.equal(academyReadOnly(row, new Date("2026-09-29T03:00:00Z")), true);
+  assert.equal(academyReadOnly({ ...row, billing_plan: "completo", paid_until: "2026-10-30" }, new Date("2026-09-29T03:00:00Z")), false);
+  assert.equal(academyReadOnly({ ...row, access_status: "vitalicio" }, new Date("2026-09-29T03:00:00Z")), false);
 });

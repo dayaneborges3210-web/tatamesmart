@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { hashPassword } from "better-auth/crypto";
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
-import { academyMiddleware, academyOf, ensureStaffLoginCols } from "@/lib/academy-actor";
+import { academyWriteMiddleware, academyMiddleware, academyOf, ensureStaffLoginCols } from "@/lib/academy-actor";
 import { getSql } from "@/lib/db";
 import { DEFAULT_CHARGE_TEXTS, buildMessage, invoiceStatus, phaseFor } from "@/lib/cobranca";
 import { sendWhatsAppText, evolutionQr, evolutionState } from "@/lib/whatsapp";
@@ -1020,6 +1020,8 @@ export const runWaBot = createServerOnlyFn(async () => {
     const mailRows = await sql<{ email: string | null }>`select email from "user" where id = ${s.user_id}`;
     if (isDemoEmail(mailRows[0]?.email)) continue;
     try {
+      const { assertAcademyWritable } = await import("./academy-access.server");
+      await assertAcademyWritable(s.user_id);
       const cob = await dispatchToday(s.user_id);
       const al = await dispatchAlarms(s.user_id);
       results.push({ school: s.name, sent: cob.sent, failed: cob.failed, alarms: al.sent });
@@ -1037,14 +1039,14 @@ export const runWaBot = createServerOnlyFn(async () => {
 });
 
 export const dispatchTodayFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .handler(async ({ context }) => {
     const result = await dispatchToday(context.userId, context.sessionUserId);
     return { ...result, snapshot: await snapshot(context.userId, context.sessionUserId) };
   });
 
 export const testWhatsAppFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .handler(async ({ context }) => {
     const sql = await getSql();
     const rows = await sql<{
@@ -1083,14 +1085,14 @@ export const waStateFn = createServerFn({ method: "POST" })
   });
 
 export const waQrFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .handler(async ({ context }) => {
     const creds = await schoolWa(context.userId);
     return evolutionQr(creds);
   });
 
 export const addStudentFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator(
     (d: {
       name: string;
@@ -1144,7 +1146,7 @@ export const addStudentFn = createServerFn({ method: "POST" })
   });
 
 export const saveStudentFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator(
     (d: {
       id: string;
@@ -1218,7 +1220,7 @@ export const saveStudentFn = createServerFn({ method: "POST" })
   });
 
 export const deleteStudentFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { id: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1232,7 +1234,7 @@ export const deleteStudentFn = createServerFn({ method: "POST" })
   });
 
 export const addPlanFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator(
     (d: { name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number; branchId?: string }) => d,
   )
@@ -1254,7 +1256,7 @@ export const addPlanFn = createServerFn({ method: "POST" })
   });
 
 export const savePlanFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator(
     (d: { id: string; name: string; durationMonths: number; billing: "mensal" | "unico"; amount: number; weeklyLimit: number; dueDay: number }) => d,
   )
@@ -1274,7 +1276,7 @@ export const savePlanFn = createServerFn({ method: "POST" })
   });
 
 export const deletePlanFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { id: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1285,7 +1287,7 @@ export const deletePlanFn = createServerFn({ method: "POST" })
   });
 
 export const toggleAttendanceFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { studentId: string; classId: string; date: string; present: boolean }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1305,7 +1307,7 @@ export const toggleAttendanceFn = createServerFn({ method: "POST" })
   });
 
 export const markPaidFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((id: string) => id)
   .handler(async ({ context, data: invoiceId }) => {
     const sql = await getSql();
@@ -1314,7 +1316,7 @@ export const markPaidFn = createServerFn({ method: "POST" })
   });
 
 export const markReminderFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { invoiceId: string; phase: ReminderSend["phase"] }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1331,7 +1333,7 @@ export const markReminderFn = createServerFn({ method: "POST" })
   });
 
 export const addPayableFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { title: string; vendor: string; category: string; amount: number; due: string; branchId?: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1344,7 +1346,7 @@ export const addPayableFn = createServerFn({ method: "POST" })
   });
 
 export const settlePayableFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((id: string) => id)
   .handler(async ({ context, data: id }) => {
     const sql = await getSql();
@@ -1353,7 +1355,7 @@ export const settlePayableFn = createServerFn({ method: "POST" })
   });
 
 export const addAgendaFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { title: string; note: string; due: string; alarmAt: string; branchId?: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1365,7 +1367,7 @@ export const addAgendaFn = createServerFn({ method: "POST" })
   });
 
 export const toggleAgendaFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((id: string) => id)
   .handler(async ({ context, data: id }) => {
     const sql = await getSql();
@@ -1380,7 +1382,7 @@ export const toggleAgendaFn = createServerFn({ method: "POST" })
   });
 
 export const markAlarmFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((id: string) => id)
   .handler(async ({ context, data: id }) => {
     const sql = await getSql();
@@ -1389,7 +1391,7 @@ export const markAlarmFn = createServerFn({ method: "POST" })
   });
 
 export const saveSchoolFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: {
     name: string;
     theme: string;
@@ -1438,7 +1440,7 @@ export const saveSchoolFn = createServerFn({ method: "POST" })
   });
 
 export const addStaffFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { name: string; role: string; phone: string; pay: number; branchId?: string; email?: string; password?: string }) => d)
   .handler(async ({ context, data }) => {
     if (context.isStaff) throw new Error("Só o dono libera o login da filial.");
@@ -1455,7 +1457,7 @@ export const addStaffFn = createServerFn({ method: "POST" })
   });
 
 export const saveStaffFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { id: string; name: string; role: string; phone: string; pay: number; email?: string; password?: string }) => d)
   .handler(async ({ context, data }) => {
     if (context.isStaff) throw new Error("Só o dono altera o login da filial.");
@@ -1472,7 +1474,7 @@ export const saveStaffFn = createServerFn({ method: "POST" })
   });
 
 export const deleteStaffFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { id: string }) => d)
   .handler(async ({ context, data }) => {
     if (context.isStaff) throw new Error("Só o dono exclui professor.");
@@ -1481,7 +1483,7 @@ export const deleteStaffFn = createServerFn({ method: "POST" })
   });
 
 export const addStockFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { name: string; category: string; qty: number; minQty: number; unitCost: number; price: number; branchId?: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1494,7 +1496,7 @@ export const addStockFn = createServerFn({ method: "POST" })
   });
 
 export const adjustStockFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { id: string; delta: number }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1509,7 +1511,7 @@ export const adjustStockFn = createServerFn({ method: "POST" })
   });
 
 export const saveStockFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { id: string; name: string; category: string; qty: number; minQty: number; unitCost: number; price: number }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1529,7 +1531,7 @@ export const saveStockFn = createServerFn({ method: "POST" })
   });
 
 export const deleteStockFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { id: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1538,7 +1540,7 @@ export const deleteStockFn = createServerFn({ method: "POST" })
   });
 
 export const sellStockFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { itemId: string; studentId: string; qty: number; payMethod: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1561,7 +1563,7 @@ export const sellStockFn = createServerFn({ method: "POST" })
   });
 
 export const addClassFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { name: string; modality: string; days: string[]; time: string; timeEnd: string; instructor: string; capacity: number; branchId?: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1577,7 +1579,7 @@ export const addClassFn = createServerFn({ method: "POST" })
   });
 
 export const saveClassFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { id: string; name: string; modality: string; days: string[]; time: string; timeEnd: string; instructor: string; capacity: number }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1591,7 +1593,7 @@ export const saveClassFn = createServerFn({ method: "POST" })
   });
 
 export const deleteClassFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { id: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1632,7 +1634,7 @@ function packChamp(data: ChampIn) {
 }
 
 export const addChampionshipFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: ChampIn) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1651,7 +1653,7 @@ export const addChampionshipFn = createServerFn({ method: "POST" })
   });
 
 export const saveChampionshipFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: ChampIn & { id: string }) => d)
   .handler(async ({ context, data }) => {
     const sql = await getSql();
@@ -1668,7 +1670,7 @@ export const saveChampionshipFn = createServerFn({ method: "POST" })
   });
 
 export const addBranchFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { name: string; address?: string; phone?: string; pix?: string }) => d)
   .handler(async ({ context, data }) => {
     if (context.isStaff) throw new Error("Só o dono cadastra filial.");
@@ -1683,7 +1685,7 @@ export const addBranchFn = createServerFn({ method: "POST" })
   });
 
 export const saveBranchFn = createServerFn({ method: "POST" })
-  .middleware([academyMiddleware])
+  .middleware([academyWriteMiddleware])
   .validator((d: { id: string; name: string; address?: string; phone?: string; pix?: string; active?: boolean }) => d)
   .handler(async ({ context, data }) => {
     if (context.isStaff) throw new Error("Só o dono altera filial.");

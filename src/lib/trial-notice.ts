@@ -11,5 +11,12 @@ export function trialNotice(created: Date | string, now: Date = new Date()) {
   const message = day < 7
     ? `Hoje é seu ${ordinals[day - 1]} dia de teste gratuito. ${remaining === 1 ? "Resta 1 dia" : `Restam ${remaining} dias`} para você efetuar o pagamento do seu plano.`
     : `${day === 7 ? "Hoje é o dia de você assinar seu plano." : "Seu teste gratuito terminou."} Acesse Configurações → Plano TatameSmart e efetue o pagamento do seu plano para seguir utilizando o melhor sistema de gestão de academias de luta.`;
-  return { date, day, remaining, due: day >= 7, message };
+  return { date, day, remaining, due: day >= 7, readOnly: day >= 8, message };
+}
+
+export function academyReadOnly(row: { created: Date | string; billing_plan: string; access_status: string; paid_until: Date | string | null }, now = new Date()) {
+  if (row.access_status === "vitalicio") return false;
+  if (row.access_status === "blocked") return true;
+  if (row.paid_until) return false;
+  return row.billing_plan === "trial" && !!trialNotice(row.created, now)?.readOnly;
 }

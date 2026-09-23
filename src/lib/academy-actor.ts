@@ -45,3 +45,11 @@ export const academyMiddleware = createMiddleware({ type: "function" })
       },
     });
   });
+
+export const academyWriteMiddleware = createMiddleware({ type: "function" })
+  .middleware([academyMiddleware])
+  .server(async ({ next, context }) => {
+    const { assertAcademyWritable } = await import("./academy-access.server");
+    await assertAcademyWritable(context.userId);
+    return next();
+  });
