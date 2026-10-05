@@ -890,6 +890,47 @@ export const loadDojo = createServerFn({ method: "GET" })
     return snapshot(context.userId, context.sessionUserId);
   });
 
+
+async function ensureDueWindow(userId: string, today: string) {
+  const sql = await getSql();
+  const students = await sql<{
+    id: string;
+    due_day: number | null;
+    plan_id: string | null;
+    branch_id: string | null;
+    status: string;
+    scholarship: boolean | null;
+  }>`select id, due_day, plan_id, branch_id, status, scholarship from students where user_id = ${userId}`;
+  for (const s of students) {
+    if (s.scholarship) continue;
+    if (s.status !== "ativo") continue;
+    const due = nextDueFromDay(clampDueDay(s.due_day || 10), today);
+    if (daysUntil(due, today) > 5) continue;
+    const month = due.slice(0, 7);
+    const same = await sql<{ id: string; status: string }>`
+      select id, status from invoices where user_id = ${userId} and student_id = ${s.id} and month = ${month}
+    `;
+    const open = same.find((i) => i.status !== "paga");
+    if (open) {
+      await sql`update invoices set due = ${due} where id = ${open.id} and user_id = ${userId}`;
+      continue;
+    }
+    if (same.length) continue;
+    const plans = s.plan_id
+      ? await sql<{ amount: number }>`select amount from plans where id = ${s.plan_id} and user_id = ${userId}`
+      : [];
+    const last = await sql<{ amount: number }>`
+      select amount from invoices where user_id = ${userId} and student_id = ${s.id} order by due desc limit 1
+    `;
+    const amount = Number(plans[0]?.amount || last[0]?.amount || 0);
+    if (!amount) continue;
+    const id = `${userId}:${s.id}:${month}`;
+    await sql`insert into invoices (id, user_id, student_id, month, amount, status, due, branch_id)
+      values (${id}, ${userId}, ${s.id}, ${month}, ${amount}, ${"aberta"}, ${due}, ${s.branch_id || ""})
+      on conflict (id) do nothing`;
+  }
+}
+
 async function dispatchToday(userId: string, sessionUserId = userId) {
   const sql = await getSql();
   await sql.query(`
@@ -904,8 +945,9 @@ async function dispatchToday(userId: string, sessionUserId = userId) {
       primary key (user_id, kind, item_id, dispatch_day)
     )
   `);
-  const snap = await snapshot(userId, sessionUserId);
   const today = todayISO();
+  await ensureDueWindow(userId, today);
+  const snap = await snapshot(userId, sessionUserId);
   let sent = 0;
   let failed = 0;
   const errors: string[] = [];
@@ -946,12 +988,18 @@ async function dispatchToday(userId: string, sessionUserId = userId) {
       student,
       invoice: inv,
       phase,
+      today,
       templates: snap.chargeTexts,
     });
     const claim = await sql`insert into wa_dispatch_claims (user_id, kind, item_id, dispatch_day)
       values (${userId}, ${"invoice"}, ${inv.id}, ${today})
       on conflict do nothing returning item_id`;
-    if (!claim.length) continue;
+    if (!claim.length) {
+      const again = await sql`update wa_dispatch_claims set status = ${"attempting"}, updated_at = now()
+        where user_id = ${userId} and kind = ${"invoice"} and item_id = ${inv.id} and dispatch_day = ${today} and status <> ${"sent"}
+        returning item_id`;
+      if (!again.length) continue;
+    }
     try {
       const creds = await credsFor(student.branchId || inv.branchId || matrizId);
       await sendWhatsAppText({ ...creds, to: student.phone, body: text });

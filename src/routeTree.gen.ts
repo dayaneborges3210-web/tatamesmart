@@ -30,6 +30,7 @@ import { Route as VideoRouteImport } from './routes/video'
 import { Route as ApiBillingWebhookRouteImport } from './routes/api/billing-webhook'
 import { Route as ApiEntrarRouteImport } from './routes/api/entrar'
 import { Route as ApiWaBotRouteImport } from './routes/api/wa-bot'
+import { Route as ApiWaCronRouteImport } from './routes/api/wa-cron'
 import { Route as ApiWaCredsRouteImport } from './routes/api/wa-creds'
 import { Route as ApiWhatsappRouteImport } from './routes/api/whatsapp'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -139,6 +140,11 @@ const ApiWaBotRoute = ApiWaBotRouteImport.update({
   path: '/api/wa-bot',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiWaCronRoute = ApiWaCronRouteImport.update({
+  id: '/api/wa-cron',
+  path: '/api/wa-cron',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiWaCredsRoute = ApiWaCredsRouteImport.update({
   id: '/api/wa-creds',
   path: '/api/wa-creds',
@@ -177,6 +183,7 @@ export interface FileRoutesByFullPath {
   '/api/billing-webhook': typeof ApiBillingWebhookRoute
   '/api/entrar': typeof ApiEntrarRoute
   '/api/wa-bot': typeof ApiWaBotRoute
+  '/api/wa-cron': typeof ApiWaCronRoute
   '/api/wa-creds': typeof ApiWaCredsRoute
   '/api/whatsapp': typeof ApiWhatsappRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -203,6 +210,7 @@ export interface FileRoutesByTo {
   '/api/billing-webhook': typeof ApiBillingWebhookRoute
   '/api/entrar': typeof ApiEntrarRoute
   '/api/wa-bot': typeof ApiWaBotRoute
+  '/api/wa-cron': typeof ApiWaCronRoute
   '/api/wa-creds': typeof ApiWaCredsRoute
   '/api/whatsapp': typeof ApiWhatsappRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -230,6 +238,7 @@ export interface FileRoutesById {
   '/api/billing-webhook': typeof ApiBillingWebhookRoute
   '/api/entrar': typeof ApiEntrarRoute
   '/api/wa-bot': typeof ApiWaBotRoute
+  '/api/wa-cron': typeof ApiWaCronRoute
   '/api/wa-creds': typeof ApiWaCredsRoute
   '/api/whatsapp': typeof ApiWhatsappRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -258,6 +267,7 @@ export interface FileRouteTypes {
     | '/api/billing-webhook'
     | '/api/entrar'
     | '/api/wa-bot'
+    | '/api/wa-cron'
     | '/api/wa-creds'
     | '/api/whatsapp'
     | '/api/auth/$'
@@ -284,6 +294,7 @@ export interface FileRouteTypes {
     | '/api/billing-webhook'
     | '/api/entrar'
     | '/api/wa-bot'
+    | '/api/wa-cron'
     | '/api/wa-creds'
     | '/api/whatsapp'
     | '/api/auth/$'
@@ -310,6 +321,7 @@ export interface FileRouteTypes {
     | '/api/billing-webhook'
     | '/api/entrar'
     | '/api/wa-bot'
+    | '/api/wa-cron'
     | '/api/wa-creds'
     | '/api/whatsapp'
     | '/api/auth/$'
@@ -337,6 +349,7 @@ export interface RootRouteChildren {
   ApiBillingWebhookRoute: typeof ApiBillingWebhookRoute
   ApiEntrarRoute: typeof ApiEntrarRoute
   ApiWaBotRoute: typeof ApiWaBotRoute
+  ApiWaCronRoute: typeof ApiWaCronRoute
   ApiWaCredsRoute: typeof ApiWaCredsRoute
   ApiWhatsappRoute: typeof ApiWhatsappRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -491,6 +504,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWaBotRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/wa-cron': {
+      id: '/api/wa-cron'
+      path: '/api/wa-cron'
+      fullPath: '/api/wa-cron'
+      preLoaderRoute: typeof ApiWaCronRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/wa-creds': {
       id: '/api/wa-creds'
       path: '/api/wa-creds'
@@ -537,6 +557,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBillingWebhookRoute: ApiBillingWebhookRoute,
   ApiEntrarRoute: ApiEntrarRoute,
   ApiWaBotRoute: ApiWaBotRoute,
+  ApiWaCronRoute: ApiWaCronRoute,
   ApiWaCredsRoute: ApiWaCredsRoute,
   ApiWhatsappRoute: ApiWhatsappRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

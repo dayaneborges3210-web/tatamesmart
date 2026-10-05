@@ -20,7 +20,7 @@ function allowed(request: Request) {
   return false;
 }
 
-export const Route = createFileRoute("/api/wa-bot")({
+export const Route = createFileRoute("/api/wa-cron")({
   server: {
     handlers: {
       GET: async ({ request }) => {

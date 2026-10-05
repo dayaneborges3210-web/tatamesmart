@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/wa-bot", "schedule": "0 11 * * *" },
+    { "path": "/api/wa-cron", "schedule": "0 19 * * *" }
+  ]
+}
