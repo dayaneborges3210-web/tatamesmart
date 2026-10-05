@@ -5,7 +5,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button, Field, Input, PasswordInput } from "@/components/ui";
 import { keepPreviewSession, loginErrorMessage } from "@/lib/preview-session";
 import { TatameLogo } from "@/components/logo";
-import { confirmPhoneResetFn, confirmResetFn, requestResetFn } from "@/lib/reset-password";
+import { confirmPhoneResetFn, confirmResetFn, confirmSupportResetFn, requestResetFn } from "@/lib/reset-password";
 import { DEMO_EMAIL, DEMO_PASSWORD, DEMO_SCHOOL } from "@/lib/demo";
 
 export const Route = createFileRoute("/login")({
@@ -46,8 +46,9 @@ function Login() {
   const [password, setPassword] = useState(import.meta.env.DEV ? "TatameTest-Qr-2026" : "");
   const [confirm, setConfirm] = useState("");
   const [code, setCode] = useState("");
-  const [resetStep, setResetStep] = useState<"email" | "code" | "celular">("email");
+  const [resetStep, setResetStep] = useState<"email" | "code" | "celular" | "suporte">("email");
   const [phone, setPhone] = useState("");
+  const [supportCode, setSupportCode] = useState("");
   const [previewCode, setPreviewCode] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -103,6 +104,20 @@ function Login() {
     setBusy(true);
     try {
       if (mode === "restaurar") {
+        if (resetStep === "suporte") {
+          if (password !== confirm) throw new Error("As senhas não são iguais.");
+          await confirmSupportResetFn({ data: { email, code: supportCode, password } });
+          setInfo("Senha atualizada. Entre com o e-mail e a senha nova.");
+          setMode("entrar");
+          setResetStep("email");
+          setPassword("");
+          setConfirm("");
+          setCode("");
+          setPhone("");
+          setSupportCode("");
+          setPreviewCode("");
+          return;
+        }
         if (resetStep === "celular") {
           if (password !== confirm) throw new Error("As senhas não são iguais.");
           await confirmPhoneResetFn({ data: { email, phone, password } });
@@ -192,11 +207,13 @@ function Login() {
         ) : null}
         <p className="mt-2 text-sm text-muted">
           {mode === "restaurar"
-            ? resetStep === "celular"
-              ? "Digite o celular que já está gravado nesta conta, com DDD, e escolha a senha nova. Nada é enviado."
-              : resetStep === "email"
-                ? "Três caminhos: e-mail, SMS, ou confirmar o celular cadastrado."
-                : "Digite o código e escolha a senha nova."
+            ? resetStep === "suporte"
+              ? "Cole o código de suporte e escolha a senha nova. Nada é enviado."
+              : resetStep === "celular"
+                ? "Digite o celular que já está gravado nesta conta, com DDD, e escolha a senha nova. Nada é enviado."
+                : resetStep === "email"
+                  ? "E-mail, SMS, celular já gravado, ou código de suporte."
+                  : "Digite o código e escolha a senha nova."
             : "Gestão de academias de luta em todo o Brasil."}
         </p>
 
@@ -246,6 +263,18 @@ function Login() {
               disabled={mode === "restaurar" && resetStep !== "email"}
             />
           </Field>
+          {mode === "restaurar" && resetStep === "suporte" ? (
+            <Field label="Código de suporte">
+              <Input
+                value={supportCode}
+                onChange={(e) => setSupportCode(e.target.value)}
+                required
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="cole o código"
+              />
+            </Field>
+          ) : null}
           {mode === "restaurar" && resetStep === "celular" ? (
             <Field label="Celular cadastrado, com DDD">
               <Input
@@ -290,7 +319,7 @@ function Login() {
             />
           </Field>
           )}
-          {mode === "restaurar" && (resetStep === "code" || resetStep === "celular") ? (
+          {mode === "restaurar" && (resetStep === "code" || resetStep === "celular" || resetStep === "suporte") ? (
             <Field label="Repita a senha">
               <PasswordInput
                 value={confirm}
@@ -332,6 +361,21 @@ function Login() {
                 }}
               >
                 Confirmar o celular cadastrado
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => {
+                  setError("");
+                  setInfo("");
+                  setPassword("");
+                  setConfirm("");
+                  setSupportCode("");
+                  setResetStep("suporte");
+                }}
+              >
+                Tenho um código de suporte
               </Button>
             </>
           ) : null}

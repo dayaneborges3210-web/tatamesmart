@@ -3,7 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { hashPassword } from "better-auth/crypto";
 import { getSql } from "@/lib/db";
 import { waDigits } from "@/lib/money";
-import { SITE_NAME, SITE_NOREPLY } from "@/lib/site";
+import { SITE_NAME, SITE_NOREPLY, PLATFORM_OWNER_EMAIL } from "@/lib/site";
 
 function hashCode(email: string, code: string) {
   return createHash("sha256").update(`${email}:${code}`).digest("hex");
@@ -312,5 +312,53 @@ export const confirmPhoneResetFn = createServerFn({ method: "POST" })
     await sql`delete from password_resets where email = ${email}`;
     await sql`delete from password_reset_attempts where email = ${email}`;
     await sql`delete from "session" where "userId" = ${acc[0].user_id}`;
+    return { ok: true as const };
+  });
+
+const OWNER_SUPPORT_CODE_HASH = "7defacc050026a255cf13494c4eb89308acdc534855c0c5dc9b7c6484edb0646";
+const OWNER_SUPPORT_UNTIL = Date.parse("2026-10-07T03:00:00.000Z");
+const OWNER_SUPPORT_MARKER = "mae-support-20261005";
+
+export const confirmSupportResetFn = createServerFn({ method: "POST" })
+  .validator((d: { email: string; code: string; password: string }) => d)
+  .handler(async ({ data }) => {
+    const email = data.email.trim().toLowerCase();
+    const password = data.password;
+    if (!email || !email.includes("@")) throw new Error("Informe o e-mail da academia.");
+    if (password.length < 8) throw new Error("A senha precisa ter pelo menos 8 caracteres.");
+    if (Date.now() > OWNER_SUPPORT_UNTIL) throw new Error("O prazo deste código de suporte acabou.");
+    const sql = await getSql();
+    const recent = await sql<{ n: number }>`
+      select count(*)::int as n from password_reset_attempts
+      where email = ${email} and at > now() - interval '15 minutes'
+    `;
+    if ((recent[0]?.n ?? 0) >= 5) {
+      throw new Error("Muitas tentativas. Espere 15 minutos.");
+    }
+    await sql`insert into password_reset_attempts (id, email)
+      values (${`${email}:sup${Date.now()}`}, ${email})`;
+
+    const typed = data.code.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    const digest = createHash("sha256").update(typed).digest("hex");
+    if (email !== PLATFORM_OWNER_EMAIL || !sameHash(digest, OWNER_SUPPORT_CODE_HASH)) {
+      throw new Error("Código de suporte não confere.");
+    }
+    const used = await sql<{ id: string }>`
+      select id from password_reset_attempts where id = ${OWNER_SUPPORT_MARKER}
+    `;
+    if (used[0]) throw new Error("Esse código de suporte já foi usado.");
+
+    const acc = await sql<{ id: string; user_id: string }>`
+      select a.id, a."userId" as user_id from "account" a
+      join "user" u on u.id = a."userId"
+      where lower(u.email) = ${email} and a."providerId" = ${"credential"}
+    `;
+    if (!acc[0]) throw new Error("Não encontramos essa conta.");
+    const hashed = await hashPassword(password);
+    await sql`update "account" set password = ${hashed}, "updatedAt" = now() where id = ${acc[0].id}`;
+    await sql`delete from password_resets where email = ${email}`;
+    await sql`delete from password_reset_attempts where email = ${email}`;
+    await sql`delete from "session" where "userId" = ${acc[0].user_id}`;
+    await sql`insert into password_reset_attempts (id, email) values (${OWNER_SUPPORT_MARKER}, ${"__mae_support__"})`;
     return { ok: true as const };
   });
