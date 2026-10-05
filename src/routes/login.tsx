@@ -103,14 +103,14 @@ function Login() {
     try {
       if (mode === "restaurar") {
         if (resetStep === "email") {
-          const res = await requestResetFn({ data: { email } });
+          const res = await requestResetFn({ data: { email, channel: "email" } });
+          if (!res.sent) {
+            setInfo(res.message);
+            return;
+          }
           setResetStep("code");
           setPreviewCode(res.previewCode ?? "");
-          setInfo(
-            res.previewCode
-              ? "No preview o e-mail ainda não sai. Use o código abaixo."
-              : "Se o e-mail estiver cadastrado, enviamos um código de 6 dígitos. Vale 15 minutos.",
-          );
+          setInfo(res.message);
           return;
         }
         if (password !== confirm) throw new Error("As senhas não são iguais.");
@@ -127,6 +127,26 @@ function Login() {
       await enterWithEmail();
     } catch (err) {
       setError(loginErrorMessage(err, mode === "criar" ? "criar" : "entrar"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendSms() {
+    setError("");
+    setInfo("");
+    setBusy(true);
+    try {
+      const res = await requestResetFn({ data: { email, channel: "sms" } });
+      if (!res.sent) {
+        setInfo(res.message);
+        return;
+      }
+      setResetStep("code");
+      setPreviewCode(res.previewCode ?? "");
+      setInfo(res.message);
+    } catch (err) {
+      setError(loginErrorMessage(err, "entrar"));
     } finally {
       setBusy(false);
     }
@@ -159,7 +179,7 @@ function Login() {
         <p className="mt-2 text-sm text-muted">
           {mode === "restaurar"
             ? resetStep === "email"
-              ? "Enviamos um código de 6 dígitos para o e-mail da academia."
+              ? "O e-mail às vezes não sai. O SMS vai para o celular já cadastrado nesta conta."
               : "Digite o código e escolha a senha nova."
             : "Gestão de academias de luta em todo o Brasil."}
         </p>
@@ -261,10 +281,15 @@ function Login() {
                 ? "Criar academia"
                 : mode === "restaurar"
                   ? resetStep === "email"
-                    ? "Enviar código"
+                    ? "Enviar por e-mail"
                     : "Salvar senha nova"
                   : "Entrar"}
           </Button>
+          {mode === "restaurar" && resetStep === "email" ? (
+            <Button type="button" variant="ghost" disabled={busy} onClick={() => void sendSms()}>
+              {busy ? "Aguarde…" : "Enviar SMS no celular cadastrado"}
+            </Button>
+          ) : null}
         </form>
         {mode !== "restaurar" ? (
           <Button type="button" className="mt-3 w-full" disabled={busy} onClick={() => void enterDemo()}>

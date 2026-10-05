@@ -2,6 +2,7 @@ import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { hashPassword } from "better-auth/crypto";
 import { getSql } from "@/lib/db";
+import { waDigits } from "@/lib/money";
 import { SITE_NAME, SITE_NOREPLY } from "@/lib/site";
 
 function hashCode(email: string, code: string) {
@@ -38,10 +39,91 @@ async function sendResetEmail(to: string, code: string) {
   return res.ok;
 }
 
+function codeText(code: string) {
+  return `TatameSmart: seu codigo para nova senha e ${code}. Valido por 15 minutos.`;
+}
+
+function last4(phone: string) {
+  const digits = waDigits(phone);
+  return digits.slice(-4);
+}
+
+async function registeredPhone(userId: string, email: string) {
+  const sql = await getSql();
+  const school = await sql<{ owner_phone: string | null }>`
+    select owner_phone from schools where user_id = ${userId}
+  `;
+  let phone = (school[0]?.owner_phone ?? "").trim();
+  if (waDigits(phone).length >= 12) return phone;
+  try {
+    const staff = await sql<{ phone: string | null }>`
+      select phone from staff
+      where lower(email) = ${email} and coalesce(phone, '') <> ''
+      limit 1
+    `;
+    phone = (staff[0]?.phone ?? "").trim();
+    if (waDigits(phone).length >= 12) return phone;
+  } catch {
+    /* tabela de professores pode ainda não existir */
+  }
+  try {
+    const branch = await sql<{ phone: string | null }>`
+      select phone from branches
+      where user_id = ${userId} and coalesce(phone, '') <> ''
+      order by case when kind = 'matriz' then 0 else 1 end
+      limit 1
+    `;
+    phone = (branch[0]?.phone ?? "").trim();
+  } catch {
+    /* filiais podem ainda não existir */
+  }
+  return waDigits(phone).length >= 12 ? phone : "";
+}
+
+async function sendResetSms(phone: string, code: string) {
+  const to = waDigits(phone);
+  const text = codeText(code);
+  const sid = (process.env.TWILIO_ACCOUNT_SID || "").trim();
+  const token = (process.env.TWILIO_AUTH_TOKEN || "").trim();
+  const from = (process.env.TWILIO_FROM || "").trim();
+  if (sid && token && from) {
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(sid)}/Messages.json`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ To: `+${to}`, From: from, Body: text }),
+    });
+    if (res.ok) return "sms" as const;
+  }
+  const smsKey = (process.env.SMSDEV_KEY || "").trim();
+  if (smsKey) {
+    const number = to.startsWith("55") ? to.slice(2) : to;
+    const url = new URL("https://api.smsdev.com.br/v1/send");
+    url.searchParams.set("key", smsKey);
+    url.searchParams.set("type", "9");
+    url.searchParams.set("number", number);
+    url.searchParams.set("msg", text);
+    const res = await fetch(url);
+    const json = (await res.json().catch(() => ({}))) as { situacao?: string };
+    if (res.ok && String(json.situacao || "OK").toUpperCase() !== "ERRO") return "sms" as const;
+  }
+  return false;
+}
+
+async function sendResetWhatsApp(userId: string, phone: string, code: string) {
+  const { ensureSchoolWa } = await import("./platform-wa.server");
+  const { sendWhatsAppText } = await import("./whatsapp");
+  const creds = await ensureSchoolWa(userId);
+  await sendWhatsAppText({ ...creds, to: phone, body: codeText(code) });
+}
+
 export const requestResetFn = createServerFn({ method: "POST" })
-  .validator((d: { email: string }) => d)
+  .validator((d: { email: string; channel?: "email" | "sms" }) => d)
   .handler(async ({ data }) => {
     const email = data.email.trim().toLowerCase();
+    const channel = data.channel === "sms" ? "sms" : "email";
     if (!email || !email.includes("@")) {
       throw new Error("Informe o e-mail da academia.");
     }
@@ -62,7 +144,14 @@ export const requestResetFn = createServerFn({ method: "POST" })
       where lower(u.email) = ${email} and a."providerId" = ${"credential"}
     `;
     if (!users[0]) {
-      return { ok: true as const };
+      return {
+        ok: true as const,
+        sent: false,
+        message:
+          channel === "sms"
+            ? "Se este e-mail estiver cadastrado e tiver celular, enviamos o código por SMS."
+            : "Se o e-mail estiver cadastrado, enviamos um código de 6 dígitos. Vale 15 minutos.",
+      };
     }
 
     const last = await sql<{ created_at: Date | string }>`
@@ -73,6 +162,11 @@ export const requestResetFn = createServerFn({ method: "POST" })
       if (Date.now() - created < 60_000) {
         throw new Error("Aguarde um minuto para pedir outro código.");
       }
+    }
+
+    const phone = channel === "sms" ? await registeredPhone(users[0].id, email) : "";
+    if (channel === "sms" && !phone) {
+      throw new Error("Esta conta não tem celular cadastrado. O SMS sai só para o número gravado nela.");
     }
 
     const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
@@ -87,13 +181,42 @@ export const requestResetFn = createServerFn({ method: "POST" })
         created_at = excluded.created_at
     `;
 
+    if (channel === "sms") {
+      const sms = await sendResetSms(phone, code).catch(() => false);
+      if (sms === "sms") {
+        return {
+          ok: true as const,
+          sent: true,
+          previewCode: previewMail() ? code : undefined,
+          message: `Código enviado por SMS para o celular de final ${last4(phone)}. Vale 15 minutos.`,
+        };
+      }
+      try {
+        await sendResetWhatsApp(users[0].id, phone, code);
+        return {
+          ok: true as const,
+          sent: true,
+          previewCode: previewMail() ? code : undefined,
+          message: `O SMS da operadora ainda não está ligado. Enviei o código no WhatsApp do final ${last4(phone)}. Vale 15 minutos.`,
+        };
+      } catch {
+        await sql`delete from password_resets where email = ${email}`;
+        throw new Error("Não foi possível enviar o SMS para o celular cadastrado. Tente de novo em instantes.");
+      }
+    }
+
     const mailed = await sendResetEmail(email, code);
     if (!mailed && !previewMail()) {
-      throw new Error("Não foi possível enviar o e-mail. Tente de novo em instantes.");
+      await sql`delete from password_resets where email = ${email}`;
+      throw new Error("Não foi possível enviar o e-mail. Use o SMS no celular cadastrado.");
     }
     return {
       ok: true as const,
+      sent: true,
       previewCode: previewMail() ? code : undefined,
+      message: previewMail()
+        ? "No preview o e-mail ainda não sai. Use o código abaixo."
+        : "Se o e-mail estiver cadastrado, enviamos um código de 6 dígitos. Vale 15 minutos.",
     };
   });
 
