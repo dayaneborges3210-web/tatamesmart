@@ -247,8 +247,8 @@ export const confirmResetFn = createServerFn({ method: "POST" })
       throw new Error("Código inválido.");
     }
 
-    const acc = await sql<{ id: string }>`
-      select a.id from "account" a
+    const acc = await sql<{ id: string; user_id: string }>`
+      select a.id, a."userId" as user_id from "account" a
       join "user" u on u.id = a."userId"
       where lower(u.email) = ${email} and a."providerId" = ${"credential"}
     `;
@@ -259,5 +259,58 @@ export const confirmResetFn = createServerFn({ method: "POST" })
     `;
     await sql`delete from password_resets where email = ${email}`;
     await sql`delete from password_reset_attempts where email = ${email}`;
+    await sql`delete from "session" where "userId" = ${acc[0].user_id}`;
+    return { ok: true as const };
+  });
+
+function samePhone(saved: string, typed: string) {
+  const a = waDigits(saved);
+  const b = waDigits(typed);
+  if (a.length < 12 || b.length < 12) return false;
+  return a === b;
+}
+
+export const confirmPhoneResetFn = createServerFn({ method: "POST" })
+  .validator((d: { email: string; phone: string; password: string }) => d)
+  .handler(async ({ data }) => {
+    const email = data.email.trim().toLowerCase();
+    const password = data.password;
+    if (!email || !email.includes("@")) throw new Error("Informe o e-mail da academia.");
+    if (password.length < 8) throw new Error("A senha precisa ter pelo menos 8 caracteres.");
+    const sql = await getSql();
+    const recent = await sql<{ n: number }>`
+      select count(*)::int as n from password_reset_attempts
+      where email = ${email} and at > now() - interval '15 minutes'
+    `;
+    if ((recent[0]?.n ?? 0) >= 5) {
+      throw new Error("Muitas tentativas. Espere 15 minutos.");
+    }
+    await sql`insert into password_reset_attempts (id, email)
+      values (${`${email}:tel${Date.now()}`}, ${email})`;
+
+    const users = await sql<{ id: string }>`
+      select u.id from "user" u
+      join "account" a on a."userId" = u.id
+      where lower(u.email) = ${email} and a."providerId" = ${"credential"}
+    `;
+    if (!users[0]) throw new Error("Não encontramos essa conta.");
+    const saved = await registeredPhone(users[0].id, email);
+    if (!saved) {
+      throw new Error("Esta conta não tem celular cadastrado. Grave o número em Configurações antes de usar este caminho.");
+    }
+    if (!samePhone(saved, data.phone)) {
+      throw new Error("Esse não é o celular cadastrado nesta conta.");
+    }
+    const acc = await sql<{ id: string; user_id: string }>`
+      select a.id, a."userId" as user_id from "account" a
+      join "user" u on u.id = a."userId"
+      where lower(u.email) = ${email} and a."providerId" = ${"credential"}
+    `;
+    if (!acc[0]) throw new Error("Não encontramos essa conta.");
+    const hashed = await hashPassword(password);
+    await sql`update "account" set password = ${hashed}, "updatedAt" = now() where id = ${acc[0].id}`;
+    await sql`delete from password_resets where email = ${email}`;
+    await sql`delete from password_reset_attempts where email = ${email}`;
+    await sql`delete from "session" where "userId" = ${acc[0].user_id}`;
     return { ok: true as const };
   });

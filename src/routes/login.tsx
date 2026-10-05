@@ -5,7 +5,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button, Field, Input, PasswordInput } from "@/components/ui";
 import { keepPreviewSession, loginErrorMessage } from "@/lib/preview-session";
 import { TatameLogo } from "@/components/logo";
-import { confirmResetFn, requestResetFn } from "@/lib/reset-password";
+import { confirmPhoneResetFn, confirmResetFn, requestResetFn } from "@/lib/reset-password";
 import { DEMO_EMAIL, DEMO_PASSWORD, DEMO_SCHOOL } from "@/lib/demo";
 
 export const Route = createFileRoute("/login")({
@@ -46,7 +46,8 @@ function Login() {
   const [password, setPassword] = useState(import.meta.env.DEV ? "TatameTest-Qr-2026" : "");
   const [confirm, setConfirm] = useState("");
   const [code, setCode] = useState("");
-  const [resetStep, setResetStep] = useState<"email" | "code">("email");
+  const [resetStep, setResetStep] = useState<"email" | "code" | "celular">("email");
+  const [phone, setPhone] = useState("");
   const [previewCode, setPreviewCode] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -102,6 +103,19 @@ function Login() {
     setBusy(true);
     try {
       if (mode === "restaurar") {
+        if (resetStep === "celular") {
+          if (password !== confirm) throw new Error("As senhas não são iguais.");
+          await confirmPhoneResetFn({ data: { email, phone, password } });
+          setInfo("Senha atualizada. Entre com o e-mail e a senha nova.");
+          setMode("entrar");
+          setResetStep("email");
+          setPassword("");
+          setConfirm("");
+          setCode("");
+          setPhone("");
+          setPreviewCode("");
+          return;
+        }
         if (resetStep === "email") {
           const res = await requestResetFn({ data: { email, channel: "email" } });
           if (!res.sent) {
@@ -178,9 +192,11 @@ function Login() {
         ) : null}
         <p className="mt-2 text-sm text-muted">
           {mode === "restaurar"
-            ? resetStep === "email"
-              ? "O e-mail às vezes não sai. O SMS vai para o celular já cadastrado nesta conta."
-              : "Digite o código e escolha a senha nova."
+            ? resetStep === "celular"
+              ? "Digite o celular que já está gravado nesta conta, com DDD, e escolha a senha nova. Nada é enviado."
+              : resetStep === "email"
+                ? "Três caminhos: e-mail, SMS, ou confirmar o celular cadastrado."
+                : "Digite o código e escolha a senha nova."
             : "Gestão de academias de luta em todo o Brasil."}
         </p>
 
@@ -227,9 +243,22 @@ function Login() {
               onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
-              disabled={mode === "restaurar" && resetStep === "code"}
+              disabled={mode === "restaurar" && resetStep !== "email"}
             />
           </Field>
+          {mode === "restaurar" && resetStep === "celular" ? (
+            <Field label="Celular cadastrado, com DDD">
+              <Input
+                type="tel"
+                inputMode="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                required
+                autoComplete="tel"
+                placeholder="62 99999-0000"
+              />
+            </Field>
+          ) : null}
           {mode === "restaurar" && resetStep === "code" ? (
             <>
               {previewCode ? (
@@ -261,7 +290,7 @@ function Login() {
             />
           </Field>
           )}
-          {mode === "restaurar" && resetStep === "code" ? (
+          {mode === "restaurar" && (resetStep === "code" || resetStep === "celular") ? (
             <Field label="Repita a senha">
               <PasswordInput
                 value={confirm}
@@ -286,9 +315,25 @@ function Login() {
                   : "Entrar"}
           </Button>
           {mode === "restaurar" && resetStep === "email" ? (
-            <Button type="button" variant="ghost" disabled={busy} onClick={() => void sendSms()}>
-              {busy ? "Aguarde…" : "Enviar SMS no celular cadastrado"}
-            </Button>
+            <>
+              <Button type="button" variant="ghost" disabled={busy} onClick={() => void sendSms()}>
+                {busy ? "Aguarde…" : "Enviar SMS no celular cadastrado"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => {
+                  setError("");
+                  setInfo("");
+                  setPassword("");
+                  setConfirm("");
+                  setResetStep("celular");
+                }}
+              >
+                Confirmar o celular cadastrado
+              </Button>
+            </>
           ) : null}
         </form>
         {mode !== "restaurar" ? (
