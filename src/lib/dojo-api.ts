@@ -608,9 +608,10 @@ async function seedIfNeeded(userId: string, schoolName: string, withRoster = fal
       const platform = await ensurePlatformWa();
       if (platform.url && platform.token) {
         await sql`update schools set wa_url = ${platform.url}, wa_auto = ${true} where user_id = ${userId}`;
+        await ensureSchoolWa(userId);
       }
     } catch {
-      /* platform may be empty on first academy */
+      /* a academia abre mesmo se o QR ainda não nasceu */
     }
   } else if (withRoster) {
     await sql`update schools set name = ${schoolName} where user_id = ${userId}`;

@@ -58,13 +58,14 @@ export async function ensurePlatformWa(): Promise<PlatformWa> {
       wa_phone_id: string | null;
       wa_token: string | null;
       user_id: string;
-    }>`select s.wa_url, s.wa_phone_id, s.wa_token, s.user_id from schools s
-       join "user" u on u.id = s.user_id
-       where lower(u.email) = ${PLATFORM_OWNER_EMAIL}
-       and coalesce(s.wa_token, '') <> '' and coalesce(s.wa_url, '') <> ''
+    }>`select s.wa_url, s.wa_phone_id, s.wa_token, s.user_id
+       from schools s
+       left join "user" u on u.id = s.user_id
+       where coalesce(s.wa_token, '') <> ''
+       order by case when lower(coalesce(u.email, '')) = ${PLATFORM_OWNER_EMAIL} then 0 else 1 end, s.user_id
        limit 1`;
     if (school[0]) {
-      url = (school[0].wa_url ?? "").trim();
+      url = (school[0].wa_url ?? "").trim() || url;
       instance = (school[0].wa_phone_id ?? "").trim();
       if (/^metalcore$/i.test(instance) || /^autocore$/i.test(instance)) instance = "";
       token = (school[0].wa_token ?? "").trim();
@@ -104,7 +105,7 @@ export function waReadyOf(p: PlatformWa) {
 export async function ensureBranchWa(ownerUserId: string, branchId: string) {
   const platform = await ensurePlatformWa();
   if (!platform.url || !platform.token) {
-    throw new Error("A TatameSmart ainda não ligou a API do WhatsApp.");
+    throw new Error("A API do WhatsApp da TatameSmart ainda não está gravada. Ela vale para todas as academias e não se liga de novo em cada uma.");
   }
   const sql = await getSql();
   await sql.query(`
@@ -210,7 +211,7 @@ export async function ensureSchoolWa(sessionUserId: string, branchId?: string) {
 async function ensureSchoolWaLegacy(userId: string) {
   const platform = await ensurePlatformWa();
   if (!platform.url || !platform.token) {
-    throw new Error("A TatameSmart ainda não ligou a API do WhatsApp.");
+    throw new Error("A API do WhatsApp da TatameSmart ainda não está gravada. Ela vale para todas as academias e não se liga de novo em cada uma.");
   }
   const sql = await getSql();
   await sql.query(`

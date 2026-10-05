@@ -91,7 +91,7 @@ function ConfigBody() {
   }, [school, logo, ownerPhone, chargeTexts, theme, font, typeScale, waPhoneId, waUrl]);
 
   useEffect(() => {
-    if (!waReady || loading) return;
+    if (loading) return;
     let stop = false;
     setBusy(true);
     void waQrClient({ branchId: unitId })
@@ -110,10 +110,10 @@ function ConfigBody() {
     return () => {
       stop = true;
     };
-  }, [waReady, loading, unitId]);
+  }, [loading, unitId]);
 
   useEffect(() => {
-    if (!waReady || waLink === "open") return;
+    if (waLink === "open") return;
     const t = window.setInterval(() => {
       void waStateClient(unitId)
         .then((s) => {
@@ -123,7 +123,7 @@ function ConfigBody() {
         .catch(() => {});
     }, 4000);
     return () => window.clearInterval(t);
-  }, [waReady, waLink, unitId]);
+  }, [waLink, unitId]);
 
   function persist(next: {
     waUrl?: string;
@@ -389,11 +389,7 @@ function ConfigBody() {
             </Button>
           </form>
         ) : null}
-        {!waReady && !waOwner ? (
-          <p className="mt-4 text-sm text-muted">O QR da sua academia aparece assim que a empresa mãe ligar a API.</p>
-        ) : null}
-        {waReady ? (
-          <div className="mt-4 rounded-lg border border-border bg-surface p-5">
+        <div className="mt-4 rounded-lg border border-border bg-surface p-5">
             <p className="text-sm font-medium">
               {waLink === "open" ? "Conectado" : busy ? "Gerando QR…" : `Leia o QR com o celular de ${unitName}`}
             </p>
@@ -454,7 +450,6 @@ function ConfigBody() {
               </Button>
             </div>
           </div>
-        ) : null}
       </section>
 
       <section className="mt-10 max-w-xl">

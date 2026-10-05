@@ -60,6 +60,12 @@ export async function emailAuthCore(data: {
       values (${userId}, ${name}, ${""}, ${""}, ${true}, ${"ok"}, ${"trial"})
       on conflict (user_id) do nothing
     `;
+    try {
+      const { ensureSchoolWa } = await import("./platform-wa.server");
+      await ensureSchoolWa(userId);
+    } catch {
+      /* a chave global já vale para todas; se ainda não existir, a academia abre do mesmo jeito */
+    }
     return { token: await openSession(userId) };
   }
 
