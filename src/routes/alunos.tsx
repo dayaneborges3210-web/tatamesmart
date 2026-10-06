@@ -255,7 +255,7 @@ function AlunosBody() {
       {open ? (
         <div className="fixed inset-0 z-50 grid place-items-end bg-bg/70 p-0 md:place-items-center md:p-6">
           <form
-            className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-xl border border-border bg-surface p-5 md:rounded-lg"
+            className="max-h-[90dvh] min-h-0 w-full max-w-md overflow-y-auto overscroll-contain rounded-t-xl border border-border bg-surface p-5 md:rounded-lg"
             onSubmit={(e) => {
               e.preventDefault();
               if (!name.trim() || !cpf.trim() || !cep.trim() || !address.trim()) return;
@@ -488,7 +488,7 @@ function AlunosBody() {
       {ficha ? (
         <div className="fixed inset-0 z-50 grid place-items-end bg-bg/70 p-0 md:place-items-center md:p-6" onClick={() => setFicha(null)}>
           <div
-            className="w-full max-w-md rounded-t-xl border border-border bg-surface p-5 md:rounded-lg"
+            className="max-h-[90dvh] min-h-0 w-full max-w-md overflow-y-auto overscroll-contain rounded-t-xl border border-border bg-surface p-5 md:rounded-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-xs font-medium uppercase tracking-wide text-muted">Ficha</p>
