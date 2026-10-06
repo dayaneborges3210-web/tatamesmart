@@ -17,6 +17,8 @@ export type AcademyRow = {
   access: AcademyAccess;
   demo: boolean;
   createdAt: string;
+  students: number;
+  note: string;
 };
 
 function asPlan(v: string | null | undefined): AcademyPlan {
@@ -58,6 +60,7 @@ async function listRows(): Promise<AcademyRow[]> {
     school_name: string | null;
     access_status: string | null;
     billing_plan: string | null;
+    students: number;
   }>`
     select
       s.user_id as id,
@@ -66,13 +69,44 @@ async function listRows(): Promise<AcademyRow[]> {
       coalesce(u."createdAt", now()) as "createdAt",
       s.name as school_name,
       s.access_status,
-      s.billing_plan
+      s.billing_plan,
+      (select count(*)::int from students st where st.user_id = s.user_id) as students
     from schools s
     left join "user" u on u.id = s.user_id
     where lower(coalesce(u.email, '')) <> ${PLATFORM_OWNER_EMAIL}
     order by lower(coalesce(s.name, u.name, ''))
   `;
-  return rows.map((r) => ({
+  const staff = await sql<{ user_id: string; email: string | null; name: string | null }>`
+    select user_id, email, name from staff where coalesce(email, '') <> ''
+  `.catch(() => [] as { user_id: string; email: string | null; name: string | null }[]);
+  const extra = await sql<{
+    id: string;
+    email: string | null;
+    name: string | null;
+    createdAt: Date | string | null;
+    students: number;
+  }>`
+    select u.id, u.email, u.name, u."createdAt",
+      (select count(*)::int from students st where st.user_id = u.id) as students
+    from "user" u
+    where lower(coalesce(u.email, '')) <> ${PLATFORM_OWNER_EMAIL}
+      and not exists (select 1 from schools s where s.user_id = u.id)
+    order by lower(coalesce(u.email, ''))
+  `.catch(() => [] as {
+    id: string;
+    email: string | null;
+    name: string | null;
+    createdAt: Date | string | null;
+    students: number;
+  }[]);
+  const notes = new Map<string, string[]>();
+  for (const person of staff) {
+    const mail = (person.email ?? "").trim();
+    if (!mail) continue;
+    const line = `${(person.name ?? "").trim() || "Professor"}: ${mail}`;
+    notes.set(person.user_id, [...(notes.get(person.user_id) ?? []), line]);
+  }
+  const listed = rows.map((r) => ({
     userId: r.id,
     name: (r.school_name || r.user_name || "Sem nome").trim() || "Sem nome",
     email: r.email ?? "",
@@ -80,7 +114,23 @@ async function listRows(): Promise<AcademyRow[]> {
     access: asAccess(r.access_status),
     demo: isDemoEmail(r.email),
     createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : "",
+    students: Number(r.students) || 0,
+    note: (notes.get(r.id) ?? []).join(" · "),
   }));
+  for (const user of extra) {
+    listed.push({
+      userId: user.id,
+      name: (user.name || "Login sem academia").trim(),
+      email: user.email ?? "",
+      plan: "trial",
+      access: "ok",
+      demo: isDemoEmail(user.email),
+      createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : "",
+      students: Number(user.students) || 0,
+      note: "Este login não tem linha em academias",
+    });
+  }
+  return listed;
 }
 
 export const listAcademiesFn = createServerFn({ method: "GET" })

@@ -150,6 +150,7 @@ function EmpresaBody() {
                   (r) =>
                     r.name.toLowerCase().includes(term) ||
                     r.email.toLowerCase().includes(term) ||
+                    r.note.toLowerCase().includes(term) ||
                     r.userId.toLowerCase().includes(term),
                 )
               : rows;
@@ -176,7 +177,9 @@ function EmpresaBody() {
                     <td className="px-4 py-3">
                       <p className="font-medium">{r.name}</p>
                       <p className="mt-1 text-xs text-muted">{r.email}</p>
+                      <p className="mt-1 text-xs text-subtle">{r.students} aluno{r.students === 1 ? "" : "s"}</p>
                       {waByUser[r.userId] ? <p className="mt-1 text-xs text-subtle">{waByUser[r.userId]}</p> : null}
+                      {r.note ? <p className="mt-1 text-xs text-subtle">{r.note}</p> : null}
                       {r.demo ? <p className="mt-1 text-xs text-subtle">Demonstração</p> : null}
                     </td>
                     <td className="px-4 py-3">
