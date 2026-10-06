@@ -88,11 +88,12 @@ export async function savePlatformWa(userId: string, next: { url?: string; insta
   if (!isMaeEmail(me[0]?.email)) {
     throw new Error("A API do WhatsApp já é da TatameSmart. O cliente não altera.");
   }
-  const url = normalizeEvolutionUrl(next.url ?? current.url).slice(0, 200);
+  const url = normalizeEvolutionUrl(next.url ?? current.url).slice(0, 200) || "https://whatsapp.metalcoreerp.com.br";
   let instance = (next.instance ?? current.instance).trim().slice(0, 80);
   if (/^metalcore$/i.test(instance) || /^autocore$/i.test(instance)) instance = "";
-  const token = (next.token ?? "").trim();
-  const keep = token && !token.startsWith("•") ? token.slice(0, 400) : current.token;
+  const incoming = (next.token ?? "").trim();
+  const keep = incoming.length >= 16 && !incoming.startsWith("•") ? incoming.slice(0, 400) : current.token;
+  if (!keep) throw new Error("Cole a chave global uma vez. Depois ela fica gravada e não se apaga.");
   await sql`update platform_settings
     set wa_url = ${url}, wa_instance = ${instance}, wa_token = ${keep}, owner_user_id = ${current.ownerUserId || userId}, updated_at = now()
     where id = 1`;

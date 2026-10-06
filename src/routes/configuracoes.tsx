@@ -365,7 +365,10 @@ function ConfigBody() {
               setApiInfo("");
               setBusy(true);
               void persist({ waUrl: apiUrl || "https://whatsapp.metalcoreerp.com.br", waToken: apiToken, waAuto: true })
-                .then(() => { setApiToken(""); setApiInfo("API salva. Atualize o QR para conectar."); })
+                .then(() => {
+                  setApiToken("");
+                  setApiInfo(apiToken.trim() ? "Chave nova gravada. Ela permanece até você colar outra." : "A chave global continua gravada. Não precisa colar de novo.");
+                })
                 .catch((err: unknown) => setApiInfo(err instanceof Error ? err.message : "Não foi possível salvar a API."))
                 .finally(() => setBusy(false));
             }}
@@ -377,12 +380,14 @@ function ConfigBody() {
               <PasswordInput
                 value={apiToken}
                 onChange={(e) => setApiToken(e.target.value)}
-                placeholder={waReady ? "já gravado — cole outro para trocar" : "token da Evolution"}
+                placeholder={waReady ? "já gravado — só cole se for trocar" : "token da Evolution"}
                 autoComplete="off"
               />
             </Field>
             <p className="text-xs text-muted">
-              Cole URL e token global. A instância de cada academia (e o QR) nasce sozinha — não use METALCORE.
+              {waReady
+                ? "Chave global gravada. O campo fica vazio de propósito: a chave não volta para a tela e não se apaga. Vale para todas as academias."
+                : "Cole URL e token global uma vez. A instância de cada academia (e o QR) nasce sozinha — não use METALCORE."}
             </p>
             <Button type="submit" disabled={busy || loading}>
               Salvar API
@@ -394,7 +399,7 @@ function ConfigBody() {
               {waLink === "open" ? "Conectado" : busy ? "Gerando QR…" : `Leia o QR com o celular de ${unitName}`}
             </p>
             {apiInfo ? (
-              <p className={`mt-2 text-sm ${/conectado|salva|enviada|gerado/i.test(apiInfo) ? "text-success" : "text-danger"}`}>
+              <p className={`mt-2 text-sm ${/conectado|salva|enviad|gerado|gravad/i.test(apiInfo) ? "text-success" : "text-danger"}`}>
                 {apiInfo}
               </p>
             ) : null}
