@@ -6,6 +6,7 @@ import {
   listAcademiesFn,
   mpStatusFn,
   prepareWhatsAppFn,
+  recoverHiddenFn,
   saveMpTokenFn,
   setAccessFn,
   setPlanFn,
@@ -48,6 +49,7 @@ function EmpresaBody() {
   const [q, setQ] = useState("");
   const [waNote, setWaNote] = useState("Preparando o WhatsApp das academias…");
   const [waByUser, setWaByUser] = useState<Record<string, string>>({});
+  const [recover, setRecover] = useState<string[]>([]);
 
   useEffect(() => {
     void listAcademiesFn()
@@ -74,6 +76,12 @@ function EmpresaBody() {
         );
       })
       .catch((e: unknown) => setWaNote(e instanceof Error ? e.message : "Não preparou o WhatsApp."));
+    void recoverHiddenFn()
+      .then(async (notes) => {
+        setRecover(notes.map((n) => n.text));
+        if (notes.some((n) => n.text.startsWith("Recuperei"))) setRows(await listAcademiesFn());
+      })
+      .catch((e: unknown) => setRecover([e instanceof Error ? e.message : "Não consegui procurar a lista solta."]));
   }, []);
 
   async function run(key: string, work: () => Promise<AcademyRow[]>) {
@@ -104,6 +112,9 @@ function EmpresaBody() {
         Toda academia que se cadastrou. Trial, Completo R$ 99,00 ou vitalício — e bloqueio pelo UID.
       </p>
       <p className="mt-3 text-sm text-muted">{waNote}</p>
+      {recover.map((line) => (
+        <p key={line} className="mt-2 text-sm text-fg">{line}</p>
+      ))}
       <form
         className="mt-6 max-w-xl rounded-lg border border-border bg-surface p-5"
         onSubmit={(e) => {
