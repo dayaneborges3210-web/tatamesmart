@@ -90,6 +90,14 @@ export const listAcademiesFn = createServerFn({ method: "GET" })
     return listRows();
   });
 
+export const prepareWhatsAppFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    await requireMae(context.userId);
+    const { provisionAllAcademiesWa } = await import("./platform-wa.server");
+    return provisionAllAcademiesWa();
+  });
+
 export const setAccessFn = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: { userId: string; access: AcademyAccess }) => d)

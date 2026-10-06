@@ -6,7 +6,7 @@ import { academyWriteMiddleware, academyMiddleware, academyOf, ensureStaffLoginC
 import { getSql } from "@/lib/db";
 import { DEFAULT_CHARGE_TEXTS, buildMessage, invoiceStatus, phaseFor } from "@/lib/cobranca";
 import { sendWhatsAppText, evolutionQr, evolutionState } from "@/lib/whatsapp";
-import { ensureBranchWa, ensurePlatformWa, ensureSchoolWa, savePlatformWa, waReadyOf } from "@/lib/platform-wa.server";
+import { ensureBranchWa, ensurePlatformWa, ensureSchoolWa, provisionAllAcademiesWa, savePlatformWa, waReadyOf } from "@/lib/platform-wa.server";
 import { addDaysISO, addMinutesHHMM, classDates, daysUntil, todayISO, WEEKDAYS } from "@/lib/money";
 import type {
   AgendaItem,
@@ -1063,6 +1063,11 @@ async function dispatchAlarms(userId: string) {
 }
 
 export const runWaBot = createServerOnlyFn(async () => {
+  try {
+    await provisionAllAcademiesWa();
+  } catch {
+    /* o disparo de cada academia segue e cria a instância se a chave existir */
+  }
   const sql = await getSql();
   const schools = await sql<{ user_id: string; name: string }>`
     select s.user_id, s.name from schools s

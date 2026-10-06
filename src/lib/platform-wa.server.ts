@@ -3,6 +3,7 @@ import { academyOf } from "@/lib/academy-actor";
 import { createEvolutionInstance, evolutionState, instanceNameFor, instanceNameForBranch, normalizeEvolutionUrl } from "@/lib/whatsapp";
 import { randomBytes } from "node:crypto";
 import { isMaeEmail, PLATFORM_OWNER_EMAIL } from "@/lib/site";
+import { isDemoEmail } from "@/lib/demo";
 
 export type PlatformWa = {
   url: string;
@@ -256,4 +257,60 @@ async function ensureSchoolWaLegacy(userId: string) {
     await sql`update schools set wa_phone_id = ${creds.instance}, wa_url = ${platform.url} where user_id = ${userId}`;
   }
   return creds;
+}
+
+export type WaPrep = {
+  userId: string;
+  name: string;
+  open: number;
+  waiting: number;
+  error?: string;
+};
+
+export async function provisionAllAcademiesWa(): Promise<WaPrep[]> {
+  const platform = await ensurePlatformWa();
+  if (!platform.url || !platform.token) {
+    throw new Error("A API do WhatsApp da TatameSmart ainda não está gravada.");
+  }
+  const sql = await getSql();
+  const schools = await sql<{ user_id: string; name: string; email: string | null }>`
+    select s.user_id, s.name, u.email
+    from schools s
+    left join "user" u on u.id = s.user_id
+    order by lower(s.name)
+  `;
+  const out: WaPrep[] = [];
+  for (const school of schools) {
+    if (isDemoEmail(school.email)) continue;
+    try {
+      let branches: { id: string }[] = [];
+      try {
+        branches = await sql<{ id: string }>`
+          select id from branches where user_id = ${school.user_id} and active = true order by kind, name
+        `;
+      } catch {
+        branches = [];
+      }
+      let open = 0;
+      let waiting = 0;
+      const units = branches.length ? branches : [null];
+      for (const branch of units) {
+        const creds = branch ? await ensureBranchWa(school.user_id, branch.id) : await ensureSchoolWa(school.user_id);
+        const state = await evolutionState(creds).catch(() => "close");
+        if (state === "open") open += 1;
+        else waiting += 1;
+      }
+      await sql`update schools set wa_url = ${platform.url}, wa_auto = ${true} where user_id = ${school.user_id}`;
+      out.push({ userId: school.user_id, name: school.name, open, waiting });
+    } catch (err) {
+      out.push({
+        userId: school.user_id,
+        name: school.name,
+        open: 0,
+        waiting: 0,
+        error: err instanceof Error ? err.message : "Não preparou o WhatsApp.",
+      });
+    }
+  }
+  return out;
 }

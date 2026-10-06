@@ -5,6 +5,7 @@ import { Badge, Button, Field, Input, PasswordInput } from "@/components/ui";
 import {
   listAcademiesFn,
   mpStatusFn,
+  prepareWhatsAppFn,
   saveMpTokenFn,
   setAccessFn,
   setPlanFn,
@@ -45,6 +46,8 @@ function EmpresaBody() {
   const [mpOn, setMpOn] = useState(false);
   const [mpToken, setMpToken] = useState("");
   const [q, setQ] = useState("");
+  const [waNote, setWaNote] = useState("Preparando o WhatsApp das academias…");
+  const [waByUser, setWaByUser] = useState<Record<string, string>>({});
 
   useEffect(() => {
     void listAcademiesFn()
@@ -56,6 +59,21 @@ function EmpresaBody() {
     void mpStatusFn()
       .then((s) => setMpOn(s.configured))
       .catch(() => setMpOn(false));
+    void prepareWhatsAppFn()
+      .then((prep) => {
+        const open = prep.reduce((n, r) => n + r.open, 0);
+        const waiting = prep.reduce((n, r) => n + r.waiting, 0);
+        const bad = prep.filter((r) => r.error).length;
+        const next: Record<string, string> = {};
+        for (const r of prep) {
+          next[r.userId] = r.error ? "Não preparou" : r.waiting === 0 && r.open > 0 ? "Conectado" : "Falta ler o QR";
+        }
+        setWaByUser(next);
+        setWaNote(
+          `WhatsApp preparado em ${prep.length} academia${prep.length === 1 ? "" : "s"}. ${open} unidade${open === 1 ? "" : "s"} conectada${open === 1 ? "" : "s"}. ${waiting} ainda precisa${waiting === 1 ? "" : "m"} ler o QR.${bad ? ` ${bad} não preparou.` : ""}`,
+        );
+      })
+      .catch((e: unknown) => setWaNote(e instanceof Error ? e.message : "Não preparou o WhatsApp."));
   }, []);
 
   async function run(key: string, work: () => Promise<AcademyRow[]>) {
@@ -85,6 +103,7 @@ function EmpresaBody() {
       <p className="mt-1 text-sm text-muted">
         Toda academia que se cadastrou. Trial, Completo R$ 99,00 ou vitalício — e bloqueio pelo UID.
       </p>
+      <p className="mt-3 text-sm text-muted">{waNote}</p>
       <form
         className="mt-6 max-w-xl rounded-lg border border-border bg-surface p-5"
         onSubmit={(e) => {
@@ -157,6 +176,7 @@ function EmpresaBody() {
                     <td className="px-4 py-3">
                       <p className="font-medium">{r.name}</p>
                       <p className="mt-1 text-xs text-muted">{r.email}</p>
+                      {waByUser[r.userId] ? <p className="mt-1 text-xs text-subtle">{waByUser[r.userId]}</p> : null}
                       {r.demo ? <p className="mt-1 text-xs text-subtle">Demonstração</p> : null}
                     </td>
                     <td className="px-4 py-3">
