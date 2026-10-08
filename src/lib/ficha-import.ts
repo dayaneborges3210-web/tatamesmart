@@ -137,25 +137,31 @@ async function fichaKey() {
 async function readFicha(image: string): Promise<FichaRead> {
   const key = await fichaKey();
   if (!key) throw new Error("A leitura da ficha ainda não está ligada no servidor.");
-  const res = await fetch("https://api.x.ai/v1/responses", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      model: "grok-4.7",
-      input: [
-        {
-          role: "user",
-          content: [
-            { type: "input_image", image_url: image, detail: "high" },
-            { type: "input_text", text: READ_PROMPT },
-          ],
-        },
-      ],
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch("https://api.x.ai/v1/responses", {
+      method: "POST",
+      signal: AbortSignal.timeout(20000),
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: "grok-4-fast-non-reasoning",
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_image", image_url: image, detail: "high" },
+              { type: "input_text", text: READ_PROMPT },
+            ],
+          },
+        ],
+      }),
+    });
+  } catch {
+    throw new Error("A leitura demorou demais. Tire a foto de novo.");
+  }
   if (!res.ok) throw new Error("A leitura da ficha falhou. Tente outra foto.");
   return parseFicha(textFromModel(await res.json()), todayISO());
 }
