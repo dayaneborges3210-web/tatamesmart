@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Shell } from "@/components/shell";
 import { Badge, Button, Field, Input } from "@/components/ui";
 import { DueDayPicker } from "@/components/due-day";
 import { type Belt, type Modality, type Student, useDojo } from "@/lib/dojo-store";
 import { BELTS, clampDegree, formatBelt, maxDegree, STUDENT_DOCS } from "@/lib/dojo-types";
 import { brl, formatDatePt } from "@/lib/money";
+import { importFichaFn } from "@/lib/ficha-import";
 
 export const Route = createFileRoute("/alunos")({ component: AlunosPage });
 
@@ -74,6 +75,10 @@ function AlunosBody() {
   const [scholarship, setScholarship] = useState(false);
   const [docs, setDocs] = useState<string[]>([]);
   const [unitId, setUnitId] = useState("");
+  const [reading, setReading] = useState(false);
+  const [readNote, setReadNote] = useState("");
+  const photoRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -145,6 +150,52 @@ function AlunosBody() {
     });
   }
 
+  function shrinkPhoto(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const max = 1400;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          URL.revokeObjectURL(url);
+          reject(new Error("Não deu para ler a foto."));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL("image/jpeg", 0.72));
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Não deu para abrir a foto."));
+      };
+      img.src = url;
+    });
+  }
+
+  async function onFichaPhoto(file: File | undefined) {
+    if (!file) return;
+    setReading(true);
+    setReadNote("");
+    try {
+      const image = await shrinkPhoto(file);
+      const saved = await importFichaFn({ data: { image } });
+      setReadNote(`${saved.name} entrou na lista, faixa ${saved.belt}.`);
+      window.setTimeout(() => window.location.reload(), 900);
+    } catch (err) {
+      setReadNote(err instanceof Error ? err.message : "Não deu para cadastrar essa ficha.");
+    } finally {
+      setReading(false);
+      if (photoRef.current) photoRef.current.value = "";
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
   async function onCep(value: string) {
     const next = formatCep(value);
     setCep(next);
@@ -170,16 +221,42 @@ function AlunosBody() {
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Alunos</h1>
           <p className="mt-1 text-sm text-muted">Matrícula com plano, turma, faixa, documentos e ficha de saúde.</p>
         </div>
-        <Button
-          type="button"
-          onClick={() => {
-            setUnitId(branchId || branches.find((b) => b.kind === "matriz")?.id || branches[0]?.id || "");
-            setOpen(true);
-          }}
-        >
-          Novo aluno
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" disabled={reading} onClick={() => photoRef.current?.click()}>
+            {reading ? "Lendo a ficha…" : "Tirar foto"}
+          </Button>
+          <Button type="button" variant="ghost" disabled={reading} onClick={() => fileRef.current?.click()}>
+            Carregar foto
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              setUnitId(branchId || branches.find((b) => b.kind === "matriz")?.id || branches[0]?.id || "");
+              setOpen(true);
+            }}
+          >
+            Digitar
+          </Button>
+        </div>
+        <input
+          ref={photoRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => void onFichaPhoto(e.target.files?.[0])}
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => void onFichaPhoto(e.target.files?.[0])}
+        />
       </div>
+
+      {readNote ? <p className="mt-3 text-sm text-muted">{readNote}</p> : null}
 
       <div className="mt-5 max-w-md">
         <Input
