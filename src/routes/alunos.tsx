@@ -155,7 +155,7 @@ function AlunosBody() {
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
-        const max = 1400;
+        const max = 1200;
         const scale = Math.min(1, max / Math.max(img.width, img.height));
         const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(img.width * scale));
@@ -168,7 +168,7 @@ function AlunosBody() {
         }
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         URL.revokeObjectURL(url);
-        resolve(canvas.toDataURL("image/jpeg", 0.72));
+        resolve(canvas.toDataURL("image/jpeg", 0.62));
       };
       img.onerror = () => {
         URL.revokeObjectURL(url);
@@ -184,7 +184,12 @@ function AlunosBody() {
     setReadNote("");
     try {
       const image = await shrinkPhoto(file);
-      const saved = await importFichaFn({ data: { image } });
+      const saved = await Promise.race([
+        importFichaFn({ data: { image } }),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => reject(new Error("Passou de 30 segundos. Tire a foto mais perto e tente de novo.")), 30000);
+        }),
+      ]);
       setReadNote(`${saved.name} entrou na lista, faixa ${saved.belt}.`);
       window.setTimeout(() => window.location.reload(), 900);
     } catch (err) {
