@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { academyWriteMiddleware } from "@/lib/academy-actor";
 import { getSql } from "@/lib/db";
-import { isBelt, isModality, type Belt, type Modality } from "@/lib/dojo-types";
+import { isBelt, isModality, nextDueFromDay, type Belt, type Modality } from "@/lib/dojo-types";
 import { todayISO } from "@/lib/money";
 
 type FichaRead = {
@@ -191,6 +191,12 @@ export const importFichaFn = createServerFn({ method: "POST" })
     const matriz = await sql<{ id: string }>`
       select id from branches where user_id = ${context.userId} and kind = ${"matriz"} limit 1
     `;
+    const branchId = context.lockedBranchId || matriz[0]?.id || "";
+    const only = await sql<{ id: string; amount: number }>`
+      select id, amount from plans
+      where user_id = ${context.userId} and (branch_id = ${branchId} or branch_id = ${""} or branch_id is null)
+    `;
+    const plan = only.length === 1 && Number(only[0].amount) > 0 ? only[0] : null;
     const id = `${context.userId}:s${Date.now()}`;
     await sql`insert into students (
         id, user_id, name, phone, modality, belt, degree, class_id, status, joined,
@@ -212,11 +218,16 @@ export const importFichaFn = createServerFn({ method: "POST" })
         ${false},
         ${""},
         ${ficha.birth || null},
-        ${""},
+        ${plan?.id ?? ""},
         ${10},
         ${""},
-        ${context.lockedBranchId || matriz[0]?.id || ""},
+        ${branchId},
         ${false}
       )`;
+    if (plan) {
+      const due = nextDueFromDay(10, todayISO());
+      await sql`insert into invoices (id, user_id, student_id, month, amount, status, due, branch_id)
+        values (${`inv-${id}`}, ${context.userId}, ${id}, ${due.slice(0, 7)}, ${Number(plan.amount)}, ${"aberta"}, ${due}, ${branchId})`;
+    }
     return { name: ficha.name, belt: ficha.belt };
   });
