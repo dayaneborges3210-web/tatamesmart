@@ -300,6 +300,7 @@ async function snapshot(userId: string, sessionUserId = userId): Promise<DojoSna
   } catch {
     /* column already there */
   }
+  await correctFenixTuition(userId);
   const studentRows = await sql<{
     scholarship: boolean;
     id: string;
@@ -892,6 +893,30 @@ export const loadDojo = createServerFn({ method: "GET" })
   });
 
 
+async function correctFenixTuition(userId: string) {
+  const sql = await getSql();
+  const owner = await sql<{ email: string | null }>`select email from "user" where id = ${userId}`;
+  if ((owner[0]?.email ?? "").trim().toLowerCase() !== "pfenixevolution@gmail.com") return;
+  const amount = 8000;
+  const found = await sql<{ id: string }>`
+    select id from plans where user_id = ${userId} and amount = ${amount} order by id limit 1
+  `;
+  let planId = found[0]?.id ?? "";
+  if (!planId) {
+    const matriz = await sql<{ id: string }>`
+      select id from branches where user_id = ${userId} and kind = ${"matriz"} limit 1
+    `;
+    planId = `${userId}:mensalidade-80`;
+    await sql`insert into plans (id, user_id, name, duration_months, billing, amount, weekly_limit, due_day, branch_id)
+      values (${planId}, ${userId}, ${"Mensalidade"}, ${1}, ${"mensal"}, ${amount}, ${0}, ${10}, ${matriz[0]?.id ?? ""})
+      on conflict (id) do nothing`;
+  }
+  await sql`update students set plan_id = ${planId}
+    where user_id = ${userId} and coalesce(plan_id, '') = '' and scholarship is not true`;
+  await sql`update invoices set amount = ${amount}
+    where user_id = ${userId} and status <> ${"paga"} and (amount = ${17990} or amount = ${12990})`;
+}
+
 async function ensureDueWindow(userId: string, today: string) {
   const sql = await getSql();
   const students = await sql<{
@@ -1187,7 +1212,18 @@ export const addStudentFn = createServerFn({ method: "POST" })
     const plan = plans[0];
     const dueDay = clampDueDay(data.dueDay || plan?.due_day || 10);
     const due = nextDueFromDay(dueDay, t);
-    const amount = plan ? Number(plan.amount) : data.modality === "Kids" ? 12990 : 17990;
+    let amount = plan ? Number(plan.amount) : 0;
+    let planId = plan?.id ?? "";
+    if (!planId) {
+      const only = await sql<{ id: string; amount: number; due_day: number }>`
+        select id, amount, due_day from plans
+        where user_id = ${context.userId} and (branch_id = ${branchId} or branch_id = ${""} or branch_id is null)
+      `;
+      if (only.length === 1 && Number(only[0].amount) > 0) {
+        amount = Number(only[0].amount);
+        planId = only[0].id;
+      }
+    }
     const cpf = data.cpf.replace(/[^\d.\-]/g, "").slice(0, 14);
     const cep = data.cep.replace(/[^\d\-]/g, "").slice(0, 9);
     const address = data.address.trim().slice(0, 200);
@@ -1197,10 +1233,9 @@ export const addStudentFn = createServerFn({ method: "POST" })
     const birth = /^\d{4}-\d{2}-\d{2}$/.test(data.birth ?? "") ? data.birth : null;
     const docs = parseDocs((data.docs ?? []).join(",")).join(",");
     const status = data.trial ? "trial" : "ativo";
-    const planId = plan?.id ?? "";
     await sql`insert into students (id, user_id, name, phone, modality, belt, degree, class_id, status, joined, cpf, address, cep, has_health, health_note, birth, plan_id, due_day, docs, branch_id, scholarship)
       values (${id}, ${context.userId}, ${data.name}, ${data.phone}, ${data.modality}, ${data.belt}, ${degree}, ${data.classId}, ${status}, ${t}, ${cpf}, ${address}, ${cep}, ${hasHealth}, ${healthNote}, ${birth}, ${planId}, ${dueDay}, ${docs}, ${branchId}, ${data.scholarship === true})`;
-    if (data.scholarship !== true) await sql`insert into invoices (id, user_id, student_id, month, amount, status, due, branch_id)
+    if (data.scholarship !== true && amount > 0) await sql`insert into invoices (id, user_id, student_id, month, amount, status, due, branch_id)
       values (${`inv-${id}`}, ${context.userId}, ${id}, ${due.slice(0, 7)}, ${amount}, ${"aberta"}, ${due}, ${branchId})`;
     return snapshot(context.userId, context.sessionUserId);
   });
